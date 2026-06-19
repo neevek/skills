@@ -45,6 +45,16 @@ Mark each finding **accept / reject / needs-verification**, and record why rejec
 
 Before fixing any finding that asserts **wrong behavior** (a bug, not a style/contract nit), build a **red-capable** check that goes *red* on that specific symptom and *green* once fixed — a failing test at the right seam, a curl/HTTP script, a CLI invocation diffed against known-good, or a throwaway harness. Run it red **first**: a fix you can't watch turn a red check green is unverified, and you risk fixing a nearby thing that isn't the reported finding. For pure contract/packaging/style findings where no behavior is wrong, the Validation commands are enough.
 
+## Comment discipline (when applying fixes)
+
+Applies to every edit the fixer makes in the main session:
+
+- **Default to no comment.** Code should read on its own — clearer names, smaller functions, and removed dead branches beat a comment that explains them.
+- A comment is justified **only** when it records something the code cannot show: a non-obvious invariant, a why-not-the-obvious-way, a known hazard or workaround with its cause, or a contract a caller must honor.
+- When a comment is warranted, make it **precise** — state the fact, not a narration. No restating what the line does, no "fixed X", no referencing the review/finding, no commented-out code.
+- Match the surrounding file's existing comment density and idiom; do not introduce a heavier commenting style than the code already uses.
+- A finding that says "add a comment to explain this" is usually a signal to **simplify the code** instead; prefer that, and reject the comment if the simplification removes the confusion.
+
 ## Validation
 
 Run the checks for the stacks the diff touches, plus project-specific ones from the change map:

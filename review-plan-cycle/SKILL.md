@@ -70,6 +70,13 @@ When a pass accepts a **High** finding about module/interface/seam shape, don't 
 2. Each returns: the interface (types, methods, params, plus invariants/ordering/error modes); a usage example; what the implementation hides behind the seam; the dependency/adapter strategy; trade-offs (where leverage is high, where thin).
 3. Compare on **depth**, **locality**, and **seam placement**. Fold the winner into the plan and graft the best ideas from runners-up. Be opinionated. Record the choice and rationale in the ledger.
 
+## Implementation conventions the plan must carry
+
+The plan is handed to an implementer, so any convention you want the code to follow must be written into the plan — the implementer will not infer it. State these once, in the plan's **Implementation conventions** field:
+
+- **Comment discipline** — the implementer defaults to **no comments**; clearer names and smaller functions are preferred over a comment that explains them. A comment is justified only when it records something the code cannot show (a non-obvious invariant, a why-not-the-obvious-way, a known hazard/workaround, a caller-facing contract), and then it must be **precise** — the fact, not a narration of what the code does, and never commented-out code or references to the plan/task. Match the target file's existing comment density.
+- Do not let the plan itself prescribe explanatory comments as a substitute for a clear design; if a step is only understandable with a comment, that is a signal to simplify the step.
+
 ## Execution-readiness gate (the plan-loop's validation)
 
 A plan can't be compiled, but the main session checks this gate before declaring the loop done, confirming the plan is ready to hand to an implementer:
@@ -82,6 +89,7 @@ A plan can't be compiled, but the main session checks this gate before declaring
 - Rollout/rollback (or "n/a, why") is considered.
 - A deterministic validation approach is named for every High-risk behavior; "test manually" is not enough for correctness-critical behavior unless no automated hook is feasible and the plan explains why.
 - Open questions are resolved or explicitly deferred with an owner.
+- Implementation conventions are stated, including the comment discipline above.
 
 If any of these is missing, the plan is not execution-ready regardless of finding count. If the gate fails when the Stop rule would otherwise end the loop, do not silently finish: fix the gap in another pass if the cap allows, otherwise stop and report **not converged** with the specific gate gap listed.
 
@@ -122,6 +130,7 @@ Flag any step that is vague, unverifiable, or hides an unresolved unknown; any m
 - File/module targets
 - Contracts/migrations touched
 - Plan risk model
+- Implementation conventions
 - Validation strategy
 - Rollout / rollback
 - Risks
