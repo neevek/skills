@@ -52,7 +52,7 @@ Applies to every edit the fixer makes in the main session:
 - **Default to no comment.** Code should read on its own — clearer names, smaller functions, and removed dead branches beat a comment that explains them.
 - A comment is justified **only** when it records something the code cannot show: a non-obvious invariant, a why-not-the-obvious-way, a known hazard or workaround with its cause, or a contract a caller must honor.
 - When a comment is warranted, make it **precise** — state the fact, not a narration. No restating what the line does, no "fixed X", no referencing the review/finding, no commented-out code.
-- Match the surrounding file's existing comment density and idiom; do not introduce a heavier commenting style than the code already uses.
+- Before writing a comment at all, the fixer must decide it is **absolutely** necessary by the test above; if not, write none. When one is warranted, cap it at ~1–2 lines even where the file uses long multi-line blocks — matching the surrounding density or idiom never licenses verbosity. This applies on the first write, not only after a reminder.
 - A finding that says "add a comment to explain this" is usually a signal to **simplify the code** instead; prefer that, and reject the comment if the simplification removes the confusion.
 
 ## Validation
