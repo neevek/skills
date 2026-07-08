@@ -37,6 +37,14 @@ When unsure, start Lightweight and escalate to Full only if pass 1 surfaces anyt
 - For a high-impact finding (memory safety, ABI/contract break, data loss, security, or a change to architecture/lifecycle/state ownership), spawn **at most one more** read-only reviewer this pass to confirm before acting.
 - If a finding is one the reviewer wasn't sure about, resolve it into a real disposition — a feasibility/technical doubt gets that one confirming reviewer; a product/scope decision only the user can make (priorities, intent, acceptable trade-offs) means **stop and ask the user** rather than letting reviewers churn on an undecidable point.
 
+## Adjudicating a rejected finding (no extra spawn)
+
+Rejecting an at/above-threshold finding is the author overruling a fresh reviewer on the author's *own* work — the one place the loop's independence breaks. Guard it **without** paying for a dedicated reviewer: make such a rejection *provisional for one pass* and resolve it inside the next pass's reviewer, which you were spawning anyway. (Below-threshold findings need none of this — reject them freely.)
+
+- The general reviewer never sees the rejection rationale (the ledger split). If it **independently re-raises** the finding, that is corroboration: reopen and re-triage — not oscillation (see Stop rule).
+- If it does **not** re-raise it, append a targeted question to **that same reviewer's** prompt: quote the finding and the author's rejection rationale, and ask "Is this rejection sound? Default to *unsound* if uncertain." Uphold → the rejection settles and its rationale enters the ledger normally; not sound → reopen and re-triage. This adds tokens, not a round-trip.
+- **Terminal case** — if no further pass will run (Stop rule met, cap hit, or Lightweight's single pass), do **not** spawn to adjudicate: carry the contested rejection into the Final output as an open item routed to the user, with the finding and the author's rationale. The user, not another reviewer, breaks the last tie.
+
 ## Respect what's already settled
 
 Before pass 1 and in every reviewer prompt:
