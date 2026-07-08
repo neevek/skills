@@ -7,6 +7,15 @@ description: Use when running review-plan-cycle or review-fix-cycle, or when eit
 
 Shared machinery for the two review-cycle skills: `review-plan-cycle` (subject = an implementation plan) and `review-fix-cycle` (subject = a code diff). Those skills supply the *subject* and their own checklists; this skill supplies the *loop*. The leading idea: each pass uses a **fresh-context, read-only** reviewer, so the session that produced the work never reviews its own reasoning.
 
+## Effort tier (choose once, before pass 1)
+
+Scale the whole loop to the subject's size and risk — everything below is the *full* tier; don't pay it on a small change.
+
+- **Lightweight** — subject is small, low blast radius, and touches at most one risk class (a localized fix, a plan with a handful of steps). One reviewer folding all relevant scopes, **one pass** (cap 1), the calling skill's gate reduced to the items the subject actually touches, no Design It Twice.
+- **Full** — subject is large, or touches multiple risk classes, public contracts, concurrency/lifecycle, persisted/wire state, or security. Fan out by scope, pass cap per the Stop rule, full gate, Design It Twice available.
+
+When unsure, start Lightweight and escalate to Full only if pass 1 surfaces anything at/above threshold in a risk class. Escalating costs one pass; starting Full on a trivial change costs every pass.
+
 ## The loop
 
 1. **Scope** (main session, once before pass 1) — defined by the calling skill (a plan scope or a change map).
@@ -38,14 +47,28 @@ Before pass 1 and in every reviewer prompt:
 
 ## The ledger
 
-Append-only across passes. Each entry: `finding → disposition (why) → change → [skill-specific fields]`. Pass the **whole ledger** to the next reviewer so it checks prior decisions and hunts **new** issues instead of re-raising settled ones.
+Append-only across passes. Each entry: `finding → disposition (why) → change → [skill-specific fields]`.
+
+Pass the ledger to the next reviewer split in two, so anti-oscillation doesn't cost independence:
+
+- **Factual** (always passed) — what changed, and any new invariant the refined work now depends on. Lets the reviewer build on settled work instead of re-deriving it, and checks the prior decisions.
+- **Rationale** — passed for **accepted** and **deferred** findings, but **withheld** for a still-open at/above-threshold finding the author **rejected**. Don't hand the reviewer the reason a live concern was dismissed. If a fresh reviewer that never saw the rationale independently re-raises it, that is corroboration the rejection was wrong — not oscillation (see Stop rule).
+
+## Severity (calibrate every finding to this — same scale every pass)
+
+The stop threshold keys on this scale, so a fresh reviewer must use these definitions, not its own. **Inject them verbatim into every reviewer prompt.**
+
+- **High** — wrong behavior, data loss, a broken or incompatible contract, a memory-safety/security defect, or a plan step that will produce one. Blocks convergence.
+- **Medium** — correct but fragile, unmaintainable, or under-specified: a latent hazard, a missing test at a real seam, a shallow or leaky design that will cost the next change.
+- **Low** — taste, polish, naming, comment nits. Never blocks the loop.
 
 ## Stop rule
 
-Stop when **either** the reviewer reports nothing at/above the threshold **or** the pass cap is hit (default **4**). Thresholds and cap are overridable in the scope.
+Stop when **either** the reviewer reports nothing at/above the threshold **or** the pass cap is hit (default **4**; **1** in the Lightweight tier). Thresholds and cap are overridable in the scope.
 
 - A **new** finding (even another High) is normal — keep going within the cap.
 - **Oscillation** — the same concern returning after it was **settled** (accepted or rejected) in the ledger, however reworded — stops the loop early. A **deferred** finding that resurfaces is *not* oscillation; it was never decided.
+- **Not oscillation:** a rejected finding independently re-raised by a reviewer that (per the ledger split) never saw the rejection rationale — that is corroboration. Reopen and re-triage it **once**; if it's rejected again with the rationale now shown to the reviewer and still returns, that is oscillation and stops the loop.
 - If passes oscillate, or the cap is hit with open High items, stop and report **not converged** with the open list.
 - If a reviewer can't run (quota/tool failure), report **blocked** (the calling skill may name it "review blocked" / "verification blocked"), not complete.
 - Don't chase literal zero findings — reviews regenerate taste-based nits indefinitely.

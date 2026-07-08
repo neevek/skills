@@ -111,7 +111,7 @@ Specialize with the plan scope and scope focus:
 
 "Read-only planning review — do not edit files. Review the implementation plan only. You may read existing code **only** for the files/modules named in the plan scope, and only to sanity-check feasibility — do not survey the wider codebase. Use the project's domain glossary terms exactly, and respect ADRs in the touched area — do not re-litigate a decision an ADR already settled; if you think one should be reopened, say so explicitly and why.
 
-List actionable findings first, ordered by severity (High/Medium/Low), each referencing the plan step/section and with a one-line justification. Include design concerns for your assigned risk scope: architecture/state/lifecycle, API/data-model shape, UX/interaction implications when relevant, security/privacy, validation/rollout/observability, and maintainability of the planned approach.
+List actionable findings first, ordered by severity per the injected rubric (High/Medium/Low), each referencing the plan step/section and with a one-line justification. Include design concerns for your assigned risk scope: architecture/state/lifecycle, API/data-model shape, UX/interaction implications when relevant, security/privacy, validation/rollout/observability, and maintainability of the planned approach.
 
 Judge design with the Design vocabulary: prefer **deep** modules (small interface, lots of behavior); flag **shallow** modules (pass-throughs — apply the **deletion test**), leaky seams, and **speculative** seams (one adapter is a hypothetical seam, two is a real one).
 
