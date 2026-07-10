@@ -25,11 +25,21 @@ When unsure, start Lightweight and escalate to Full only if pass 1 surfaces anyt
 5. **Record** in the ledger (see *The ledger*).
 6. **Repeat** with a new fresh reviewer, passing the ledger. Stop per the *Stop rule*.
 
+A pass is **atomic**: one complete findings report → triage all of it → act on every accepted finding → one ledger update → only then the next reviewer. Never interleave fix-one/review-one — that burns the pass cap one finding at a time and presents as oscillation. If a reviewer's report comes back as a single issue or a short summary, the one-shot report contract (below) was missing from its prompt; fix the prompt, don't spend passes rediscovering the withheld findings.
+
 ## Spawning a fresh reviewer
 
 - **Claude Code**: the Agent/Task subagent tool (not the to-do `TaskCreate`) with `subagent_type: "Explore"`. Fan out by putting multiple tool calls in one message. The subagent's return value is its findings — triage them in the main session.
-- **Codex**: spawn an `explorer` with `fork_context: false` and a self-contained prompt (the scope, the reviewer prompt, and the assigned sub-scope). Fan out by spawning one reviewer per disjoint scope; collect their final messages and triage them in the main session.
-- **Fresh** means a separate agent — never the current session reviewing its own work.
+- **Codex**: spawn an `explorer` with `fork_context: false` and a self-contained prompt (the scope, the reviewer prompt, and the assigned sub-scope). GPT-based reviewers follow explicit block-structured contracts far better than prose norms: wrap the prompt in tags — `<task>`, `<severity_rubric>`, `<ledger_factual>`, `<output_contract>` (the one-shot report contract below) — instead of one long paragraph, and remember the agent's *final message* is the whole deliverable. If no subagent tool is available, run a fresh read-only CLI process (e.g. `codex exec` with a read-only sandbox) with the same self-contained prompt. Fan out by spawning one reviewer per disjoint scope; collect their final messages and triage them in the main session.
+- **Fresh** means a separate agent — never the current session reviewing its own work, not even as a fallback when spawning is unavailable (that is **blocked**, per the Stop rule).
+
+## One-shot report contract (inject verbatim, alongside the severity rubric)
+
+A reviewer reports once and is never consulted again, so any finding it holds back costs the loop a full extra pass to rediscover — from the outside this looks like oscillating on one issue at a time. GPT-based reviewers (Codex) especially tend to stop at the first plausible issue and compress their final message unless the prompt forbids both. Inject this into every reviewer prompt:
+
+"Your final message is your entire deliverable and your only report — there are no follow-up questions. Enumerate every finding you can defend in this one response, not just the most severe: after the first plausible issue, keep auditing until your assigned scope is exhausted (second-order failures, empty/error states, retries, stale state, rollback). Do not truncate for brevity. Format: one line per finding — `[High|Medium|Low] <file:line or plan step> — <defect> — <evidence> — <new | already-settled-in-ledger>`. If nothing is at/above Medium, say exactly that."
+
+A finding tagged `already-settled-in-ledger` routes to the Stop rule's oscillation/corroboration check instead of fresh triage.
 
 ## Triage discipline
 
@@ -49,7 +59,7 @@ Rejecting an at/above-threshold finding is the author overruling a fresh reviewe
 
 Before pass 1 and in every reviewer prompt:
 
-- **Standing decisions & hazard classes** — read the project's `CLAUDE.md` (and `CONTEXT.md` if present) and fold both into every reviewer prompt: **(a)** decisions the project has already settled — honor them like ADRs and do **not** raise concerns they declare out of bounds (e.g. for lockstep co-deployed repos, backward-compatibility / old-client / migration concerns are non-issues — don't flag them); **(b)** the recurring failure classes the project documents — make pass 1 adversarial on those specific modes rather than merely broad. A reviewer raising a concern the project has explicitly ruled out is noise, and re-raising it across passes is oscillation.
+- **Standing decisions & hazard classes** — read the project's standing-instructions file — `CLAUDE.md` under Claude Code, `AGENTS.md` under Codex (and `CONTEXT.md` if present) — and fold both into every reviewer prompt: **(a)** decisions the project has already settled — honor them like ADRs and do **not** raise concerns they declare out of bounds (e.g. for lockstep co-deployed repos, backward-compatibility / old-client / migration concerns are non-issues — don't flag them); **(b)** the recurring failure classes the project documents — make pass 1 adversarial on those specific modes rather than merely broad. A reviewer raising a concern the project has explicitly ruled out is noise, and re-raising it across passes is oscillation.
 - **Ubiquitous language** — read the project's domain glossary (`CONTEXT.md` / `UBIQUITOUS_LANGUAGE.md` if present) and use its terms exactly in findings, the ledger, and the refined work. Consistent language is what lets the next pass *act* on a finding instead of re-interpreting it.
 - **Respect ADRs** — do not re-litigate a decision an ADR in the touched area already settled. A reviewer that wants to reopen one must say so explicitly and why; otherwise the decision is out of bounds. Re-raising settled decisions is a top cause of oscillation.
 - **Offer an ADR** when a pass settles a load-bearing decision that is *hard to reverse*, *surprising without context*, and *the result of a real trade-off* — so future passes and future readers don't re-raise it. Skip ephemeral or self-evident reasons.
