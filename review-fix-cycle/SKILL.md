@@ -5,9 +5,9 @@ description: Iterative review-fix loop. Spawn fresh-context read-only reviewers,
 
 # review-fix-cycle
 
-Run review-fix passes until remaining findings fall below the stop threshold. This skill runs the shared review loop over a code **diff** — the subject is the diff. Its sibling `review-plan-cycle` does the same for an implementation plan before any code is written.
+Run review-fix passes over a code **diff** until remaining findings fall below the stop threshold. Sibling `review-plan-cycle` does the same for an implementation plan before any code is written.
 
-**REQUIRED SUB-SKILL:** load `review-cycle-core` for the loop mechanics — spawning fresh reviewers, triage discipline, the ledger, the stop rule, and the ADR / ubiquitous-language discipline. This skill supplies only the diff-specific specializations below.
+**REQUIRED SUB-SKILL:** load `review-cycle-core` for the loop mechanics — spawning, the one-shot report contract, triage discipline, the ledger, the stop rule, comment discipline, and ADR / ubiquitous-language discipline. This skill supplies only the diff-specific specializations below.
 
 ## Change map (core step 1, specialized)
 
@@ -15,45 +15,38 @@ A few lines, captured once before pass 1:
 
 - intent / acceptance goals.
 - diff scope (the exact command, see Diff scope).
-- changed contracts — any boundary that code or data *outside* this diff depends on, so a break is silent. List the ones this change actually touches; typical kinds: exported/public interfaces, API/RPC shapes (REST/GraphQL/protobuf) and UI component props/events/tokens, cross-language or cross-process boundaries, on-disk/wire formats, persisted or cached state, config/flags, packaged or generated outputs.
+- changed contracts — any boundary that code or data *outside* this diff depends on, so a break is silent; list the ones actually touched. Typical kinds: exported/public interfaces, API/RPC shapes (REST/GraphQL/protobuf), UI component props/events/tokens, cross-language or cross-process boundaries, on-disk/wire formats, persisted or cached state, config/flags, packaged or generated outputs.
 - validation commands for the stacks the diff touches (see Validation).
-- **spec source** — the originating issue/PRD/spec the diff is supposed to implement (path or contents). If no written spec exists, fall back to the **intent / acceptance goals** captured above — the Spec axis runs against that instead of skipping. Skip the axis only when neither a spec nor stated intent exists.
+- **spec source** — the originating issue/PRD/spec the diff implements (path or contents). If none is written, the Spec axis runs against the intent/acceptance goals above instead; skip that axis only when neither exists.
 
 ## Two review axes
 
-Each pass spawns reviewers along two **separate** axes. Keep their findings separate so one never masks the other — code that follows every standard but implements the wrong thing fails Spec while passing Correctness, and vice versa.
+Each pass spawns reviewers along two **separate** axes; keep their findings separate so one never masks the other — code that follows every standard but implements the wrong thing fails Spec while passing Correctness, and vice versa. Triage and ledger both axes; do not rerank across them.
 
-- **Correctness** — the diff itself: bugs, contracts, lifecycle, native/perf, security, simplicity (the Review checklist). Uses the Reviewer prompt.
-- **Spec** — does the diff implement what was asked? Fed the spec source, it reports: **(a)** requirements the spec asked for that are missing or partial; **(b)** behavior in the diff that wasn't asked for (scope creep); **(c)** requirements that look implemented but are wrong — quoting the spec line for each. Uses the Spec reviewer prompt, fed the spec source or, if none was written, the change map's intent/acceptance goals; skips with "no spec available" only when neither exists.
-
-Triage and ledger both axes; do not rerank across axes.
+- **Correctness** — the diff itself: bugs, contracts, lifecycle, native/perf, security, simplicity. Uses the Reviewer prompt with the injected Review checklist.
+- **Spec** — does the diff implement what was asked? Uses the Spec reviewer prompt, fed the spec source (or the intent fallback).
 
 ## Diff scope
 
 Pick one scope and put the exact command in the change map:
-- a specific commit (most common — the last commit of the current branch): `git show HEAD`, or `git show <ref>` for another commit.
+
+- a specific commit (most common — the current branch's last commit): `git show HEAD`, or `git show <ref>`.
 - a whole branch vs its base: `git diff --merge-base origin/main`.
 - uncommitted work: `git diff` (working tree) or `git diff --staged`.
 
-Exclude generated/vendored files (build outputs, generated bindings/headers, lockfiles, vendored deps, snapshots). If one changed, review the **source** that produces it, not the artifact.
+Exclude generated/vendored files (build outputs, generated bindings/headers, lockfiles, vendored deps, snapshots); if one changed, review the **source** that produces it, not the artifact.
 
 ## Triage states (core triage, specialized)
 
-Mark each finding **accept / reject / needs-verification**, and record why rejected — fresh reviewers guess wrong on `unsafe`, lifetimes, FFI, threading, and on whether a Spec "miss" was intentionally out of scope. For high-impact findings (memory safety, ABI break, data loss, security), spawn at most one more read-only reviewer per pass to confirm before editing.
+Mark each finding **accept / reject / needs-verification**, recording why rejected — fresh reviewers guess wrong on `unsafe`, lifetimes, FFI, threading, and on whether a Spec "miss" was intentionally out of scope. High-impact findings (memory safety, ABI break, data loss, security) get the core's one confirming reviewer before editing.
 
 ## Fixing correctness findings (red-capable loop)
 
-Before fixing any finding that asserts **wrong behavior** (a bug, not a style/contract nit), build a **red-capable** check that goes *red* on that specific symptom and *green* once fixed — a failing test at the right seam, a curl/HTTP script, a CLI invocation diffed against known-good, or a throwaway harness. Run it red **first**: a fix you can't watch turn a red check green is unverified, and you risk fixing a nearby thing that isn't the reported finding. For pure contract/packaging/style findings where no behavior is wrong, the Validation commands are enough.
+Before fixing any finding that asserts **wrong behavior** (a bug, not a style/contract nit), build a **red-capable** check that goes *red* on that specific symptom and *green* once fixed — a failing test at the right seam, a curl/HTTP script, a CLI invocation diffed against known-good, or a throwaway harness — and run it red **first**: a fix you can't watch turn red-to-green is unverified, and you risk fixing a nearby thing that isn't the reported finding. For pure contract/packaging/style findings where no behavior is wrong, the Validation commands are enough.
 
-## Comment discipline (when applying fixes)
+## Comment discipline
 
-Applies to every edit the fixer makes in the main session:
-
-- **Default to no comment.** Code should read on its own — clearer names, smaller functions, and removed dead branches beat a comment that explains them.
-- A comment is justified **only** when it records something the code cannot show: a non-obvious invariant, a why-not-the-obvious-way, a known hazard or workaround with its cause, or a contract a caller must honor.
-- When a comment is warranted, make it **precise** — state the fact, not a narration. No restating what the line does, no "fixed X", no referencing the review/finding, no commented-out code.
-- Before writing a comment at all, the fixer must decide it is **absolutely** necessary by the test above; if not, write none. When one is warranted, cap it at ~1–2 lines even where the file uses long multi-line blocks — matching the surrounding density or idiom never licenses verbosity. This applies on the first write, not only after a reminder.
-- A finding that says "add a comment to explain this" is usually a signal to **simplify the code** instead; prefer that, and reject the comment if the simplification removes the confusion.
+Every edit the fixer makes follows the core skill's shared **Comment discipline** — default no comment; only a fact the code cannot show; precise, ~1–2 lines, decided on the first write.
 
 ## Validation
 
@@ -76,12 +69,12 @@ Symmetric to the plan loop's execution-readiness gate. Before the Stop rule may 
 
 If any is missing, the loop is not done regardless of finding count: fix the gap in another pass within the cap, otherwise stop and report **not converged** with the gap listed.
 
-## Review checklist (single source)
+## Review checklist (single source — inject into the Correctness prompt)
 
 Check only the areas the diff touches:
 
 - **Behavior parity** — every mode/path/platform affected, including old behavior that must stay.
-- **Contracts** — signatures, public APIs, FFI/ABI, generated bindings, serialization, migrations, config defaults, CLI/API compatibility.
+- **Contracts** — signatures, public APIs, FFI/ABI, generated bindings, serialization, migrations, config defaults, CLI/API compatibility — including external callers of a changed contract that weren't updated.
 - **Build/packaging** — compiled libs, architecture/platform slices, bundled assets, plugins, manifests, release/debug divergence.
 - **Lifecycle/concurrency** — init/shutdown, pause/resume, cancellation, threading/async, ownership, resource cleanup, lock ordering, races.
 - **Native/perf-sensitive** (C/C++/Rust/media) — memory safety, lifetimes, `unsafe`, error ownership; GPU/decoder/audio/video resource lifetime, frame timing/sync, backpressure, buffering, latency.
@@ -90,6 +83,7 @@ Check only the areas the diff touches:
 - **UI** (when changed) — navigation, state persistence, disabled/loading/error states, accessibility, responsive layout, text overflow, stale controls.
 - **Tests** — missing coverage for changed contracts, edge cases, target platforms.
 - **Simplicity** — over-complex logic, needless abstraction, avoidable branching/state, readability even when correct.
+- **Comments** — comments that narrate what the code already states, restate the change, or reference this review/task (Low — prefer deleting the comment or simplifying the code over rewording it).
 
 ## Scopes (for multi-reviewer fan-out)
 
@@ -103,13 +97,11 @@ With one reviewer, fold the relevant scopes into one prompt.
 
 ## Reviewer prompt (base) — Correctness axis
 
-Specialize with the change map, diff-scope command, and scope:
+Specialize with the change map, diff-scope command, and scope; inject the Review checklist, severity rubric, and one-shot report contract:
 
-"Read-only review — do not edit files. Run the `<diff-scope command>` to read the change, and you may read the rest of the tree to check how changed contracts are used (e.g. grep for callers of a changed signature) — but run no build/test/lint commands. Review the change against the stated intent and changed contracts. Use the project's domain glossary terms exactly, and respect ADRs in the touched area — don't re-litigate a settled decision; if you think one should be reopened, say so and why.
+"Read-only review — do not edit files. Run `<diff-scope command>` to read the change; you may read the rest of the tree to check how changed contracts are used (e.g. grep for callers of a changed signature), but run no build/test/lint commands. Review the change against the stated intent and changed contracts. Use the project's domain glossary terms exactly, and respect ADRs in the touched area — don't re-litigate a settled decision; if you think one should be reopened, say so and why.
 
-List all actionable findings first — the injected one-shot report contract applies — ordered by severity per the injected rubric (High/Medium/Low), each with file + line and a one-line justification. Skip style the formatter/linter handles. If unsure a finding is real, mark it `needs-verification` rather than asserting it.
-
-Audit only the areas the diff touches: behavior/mode/path parity; contract mismatches (APIs, FFI/ABI, generated files, serialization, migrations, config defaults, CLI/API compat) — including external callers of a changed contract that weren't updated; packaging (missing/stale artifacts, architecture slices, assets, release/debug divergence); lifecycle/concurrency/resource bugs; native/media risks (memory & resource lifetime, thread ownership, buffering, timing/sync); malformed input, escaping, paths, old saved state, precision/overflow; UI state/navigation/accessibility/responsive when UI changed; missing tests; simplicity/maintainability; and comments that narrate what the code already states, restate the change, or reference this review/task (Low — prefer deleting the comment or simplifying the code over rewording it).
+List all actionable findings first — the injected one-shot report contract applies — ordered by severity per the injected rubric (High/Medium/Low), each with file + line and a one-line justification. Audit only the areas the diff touches, per the injected Review checklist. Skip style the formatter/linter handles; if unsure a finding is real, mark it `needs-verification` rather than asserting it.
 
 For a complexity finding, optionally suggest a **minimal fix** (low-risk) and, only if warranted, a **structural refactor** (deeper redesign, with tradeoffs). If nothing is at/above Medium, say so. Do not edit files."
 
@@ -117,9 +109,9 @@ For a complexity finding, optionally suggest a **minimal fix** (low-risk) and, o
 
 Specialize with the change map, diff-scope command, and spec source:
 
-"Read-only spec review — do not edit files. Run the `<diff-scope command>` to see the change, and read the spec at `<path or contents>` (or, if no written spec exists, the stated intent/acceptance goals given above). Report **every** spec-conformance finding and only those (the injected one-shot report contract applies), ordered by severity: **(a)** requirements the spec asked for that are missing or partial; **(b)** behavior in the diff that wasn't asked for (scope creep); **(c)** requirements that look implemented but appear wrong. Quote the spec (or intent) line for each finding, with the file + line in the diff where relevant. Use the project's domain glossary terms exactly. Do not report code-quality issues — that is the other axis. If neither a spec nor stated intent was provided, reply 'no spec available'. Do not edit files."
+"Read-only spec review — do not edit files. Run `<diff-scope command>` to see the change, and read the spec at `<path or contents>` (or, if no written spec exists, the stated intent/acceptance goals given above). Report **every** spec-conformance finding and only those (the injected one-shot report contract applies), ordered by severity: **(a)** requirements the spec asked for that are missing or partial; **(b)** behavior the spec didn't ask for (scope creep); **(c)** requirements that look implemented but appear wrong. Quote the spec (or intent) line for each finding, with the file + line in the diff where relevant. Use the project's domain glossary terms exactly. Do not report code-quality issues — that is the other axis. If neither a spec nor stated intent was provided, reply 'no spec available'. Do not edit files."
 
-## Final output (core skeleton, specialized)
+## Final output (core skeleton, specialized — in the user's language, per core)
 
 - Passes run and why the loop stopped (threshold met / cap hit / not converged / verification blocked).
 - Fix summary + finding ledger (including rejected findings and why).
