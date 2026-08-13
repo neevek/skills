@@ -91,7 +91,7 @@ The stop threshold keys on this scale, so a fresh reviewer must use these defini
 
 ## Stop rule
 
-Stop when **either** the reviewer reports nothing at/above the threshold **or** the pass cap is hit (default **4**; **1** in Lightweight). Thresholds and cap are overridable in the scope.
+Stop when **either** the reviewer reports nothing at/above the threshold **or** the pass cap is hit (default **8**; **1** in Lightweight). Thresholds and cap are overridable in the scope.
 
 - A **new** finding (even another High) is normal — keep going within the cap.
 - **Oscillation** — a concern returning after being **settled** (accepted or rejected) in the ledger, however reworded — stops the loop early. A **deferred** finding resurfacing is *not* oscillation; it was never decided.
