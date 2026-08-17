@@ -5,149 +5,98 @@ description: Iterative review-fix loop. Spawn fresh-context read-only reviewers,
 
 # review-fix-cycle
 
-Run review-fix passes over a code **diff** until remaining findings fall below the stop threshold. Sibling `review-plan-cycle` does the same for an implementation plan before any code is written.
+Review-fix passes over a code **diff** until findings fall below the stop threshold. Sibling `review-plan-cycle` does this for a plan before any code exists.
 
-**REQUIRED SUB-SKILL:** load `review-cycle-core` for the loop mechanics — spawning, the one-shot report contract, triage discipline, the ledger, the stop rule, comment discipline, and ADR / ubiquitous-language discipline. This skill supplies only the diff-specific specializations below.
+**REQUIRED SUB-SKILL:** load `review-cycle-core` for the loop — effort tiers, spawning, the one-shot report contract, triage, the ledger, the stop rule, comment discipline, ADR/glossary discipline. This skill adds only the diff specifics.
 
-## Change map (core step 1, specialized)
+**The core's two standing limits bind here:** review *this diff* against the stated intent and nothing wider — a finding that would grow it goes to the user, not into the code — and validate with *related* checks, the targets covering the touched seams rather than the suite.
 
-A few lines, captured once before pass 1:
+## Change map (core step 1)
+
+A few lines before pass 1. Write **"n/a"** rather than inventing content: an imagined hot path or contract sends a reviewer hunting something that isn't there, and you pay for the hunt.
 
 - intent / acceptance goals.
-- diff scope (the exact command, see Diff scope).
-- changed contracts — any boundary that code or data *outside* this diff depends on, so a break is silent; list the ones actually touched. Typical kinds: exported/public interfaces, API/RPC shapes (REST/GraphQL/protobuf), UI component props/events/tokens, cross-language or cross-process boundaries, on-disk/wire formats, persisted or cached state, config/flags, packaged or generated outputs.
-- validation commands for the stacks the diff touches (see Validation).
-- **performance context, when touched** — the affected hot path or scaling boundary; representative workload; relevant metric or budget (latency/throughput/frame time, CPU, allocations/memory, I/O, battery, bundle/binary size); known baseline and a reproducible measurement command. If no budget or baseline exists, say so instead of inventing one.
-- **spec source** — the originating issue/PRD/spec the diff implements (path or contents). If none is written, the Spec axis runs against the intent/acceptance goals above instead; skip that axis only when neither exists.
+- diff-scope command — `git show HEAD` (or `<ref>`), `git diff --merge-base origin/main`, `git diff` / `--staged`. Exclude generated and vendored files; review the source that produces them.
+- changed contracts — boundaries outside the diff that depend on it, so a break is silent: exported APIs, RPC/API shapes, UI props/events/tokens, cross-language or cross-process seams, wire/on-disk formats, persisted or cached state, config/flags, packaged or generated output.
+- validation commands for the touched stacks (see Validation).
+- performance context **when touched** — hot path or scaling boundary, representative workload, metric or budget, known baseline, reproducible measurement command. No budget or baseline ⇒ say so, don't invent one.
+- spec source — the issue/PRD the diff implements; absent one, the Spec axis runs against the intent above. Skip that axis only when neither exists.
 
-## Two review axes
+## Two axes per pass
 
-Each pass spawns reviewers along two **separate** axes; keep their findings separate so one never masks the other — code that follows every standard but implements the wrong thing fails Spec while passing Correctness, and vice versa. Triage and ledger both axes; do not rerank across them.
+Keep their findings **separate** so neither masks the other: code can satisfy every standard and still implement the wrong thing.
 
-- **Correctness** — the diff itself: bugs, contracts, lifecycle, evidence-backed performance risks, security, simplicity. Performance stays on this axis so a specialist cannot mask ordinary correctness findings. Uses the Reviewer prompt with the injected Review checklist.
-- **Spec** — does the diff implement what was asked? Uses the Spec reviewer prompt, fed the spec source (or the intent fallback).
+- **Correctness** — the diff: bugs, contracts, lifecycle, evidence-backed performance, security, simplicity.
+- **Spec** — does it implement what was asked?
 
-## Diff scope
+Separate axes, not necessarily separate agents: at **Lightweight** both are labelled sections of one reviewer's prompt and report, since a second spawn on a three-file diff doubles the loop's dominant cost to re-read the same diff. Fan out by scope only at Full — native (memory, ownership, `unsafe`, FFI, threading, feature flags), media (buffer ownership, frame timing, GPU/decoder lifecycle), mobile/desktop (lifecycle, persistence, permissions, packaged libs), web/UI (types, async state, routing, API contracts, a11y, bundle), packaging/contracts (artifacts, bindings, schemas, migrations, platform filters), performance (only when the change map names a path).
 
-Pick one scope and put the exact command in the change map:
+## Triage states
 
-- a specific commit (most common — the current branch's last commit): `git show HEAD`, or `git show <ref>`.
-- a whole branch vs its base: `git diff --merge-base origin/main`.
-- uncommitted work: `git diff` (working tree) or `git diff --staged`.
+**accept / reject / needs-verification**, recording why rejected — reviewers guess wrong on `unsafe`, lifetimes, FFI, threading, and on whether a Spec "miss" was deliberately out of scope. The core's confirming-reviewer rule covers memory safety, ABI breaks, data loss, security.
 
-Exclude generated/vendored files (build outputs, generated bindings/headers, lockfiles, vendored deps, snapshots); if one changed, review the **source** that produces it, not the artifact.
+## Fixing a correctness finding (red-capable)
 
-## Triage states (core triage, specialized)
+A finding asserting **wrong behavior** needs a check that goes red on that symptom and green once fixed — a test at the right seam, a curl script, a CLI run diffed against known-good — run **red first**: a fix you can't watch turn red-to-green is unverified, and may be fixing something nearby. Style, contract, and packaging findings need only the Validation commands.
 
-Mark each finding **accept / reject / needs-verification**, recording why rejected — fresh reviewers guess wrong on `unsafe`, lifetimes, FFI, threading, and on whether a Spec "miss" was intentionally out of scope. High-impact findings (memory safety, ABI break, data loss, security) get the core's one confirming reviewer before editing.
+**Cheapest red check on a fix already written: invert the fix, not the bug.** Disable the new mechanism in place (`if false, …`, revert the default, comment the guard), watch the new test fail, restore, watch it pass — one build, no harness, and it proves the test binds to *this* mechanism. Never leave the inverted state behind.
 
-## Fixing correctness findings (red-capable loop)
+## Performance (conditional, evidence-gated)
 
-Before fixing any finding that asserts **wrong behavior** (a bug, not a style/contract nit), build a **red-capable** check that goes *red* on that specific symptom and *green* once fixed — a failing test at the right seam, a curl/HTTP script, a CLI invocation diffed against known-good, or a throwaway harness — and run it red **first**: a fix you can't watch turn red-to-green is unverified, and you risk fixing a nearby thing that isn't the reported finding. For pure contract/packaging/style findings where no behavior is wrong, the Validation commands are enough.
+**If the change map's performance context is "n/a", skip this section and leave performance out of the prompts.** Most diffs aren't performance-sensitive; asking anyway buys speculation you then have to triage.
 
-## Performance findings (conditional, evidence-gated)
+A static reviewer may raise a *risk*, and may call it a regression only when the change map supplies applicable measurements. Every performance finding states **mechanism** (what added work, waiting, contention, copying, I/O, rendering, or worse scaling), **hotness** (call site, frequency, input-size relation, real-time path, or budget making it material), **metric** (p95 latency, frame time, allocations/frame, peak RSS, wakeups, bundle bytes), and **verification** (the benchmark or profile comparison that would accept or reject it). Plausible mechanism with unknown hotness ⇒ `needs-verification`; a cold-path micro-optimization ⇒ omit. Severity: **High** only for a demonstrated budget/SLO breach, missed deadline, hang, or OOM; **Medium** for a credible material regression or unbounded scaling on a hot path; **Low** for a measured minor one.
 
-Performance review is useful only where the diff can plausibly affect a hot path, a scaling boundary, or an explicit resource budget. Do not force a performance finding on every diff and do not trade clarity for hypothetical micro-optimizations.
+`needs-verification` is not terminal for an at/above-threshold performance finding: run the proposed measurement during this pass's triage and convert it to accept or reject. If no representative measurement can be built, stop as **verification blocked**, naming the missing workload or tool — never carry an unresolved material risk forward or call the cycle complete.
 
-A static reviewer may identify a **performance risk**, but may call it a confirmed regression only when the change map already supplies directly applicable measurements. Every performance finding must state:
-
-- **mechanism** — the changed operation and why it adds work, waiting, contention, copying/allocation, I/O, rendering, or worse scaling;
-- **hotness evidence** — the call site, frequency, input-size relationship, real-time path, or stated budget that makes the mechanism material;
-- **expected symptom and metric** — what should move (for example p95 latency, frame time, allocations/frame, peak RSS, requests, wakeups, or bundle bytes);
-- **verification** — a representative benchmark/profile/trace and the comparison needed to accept or reject it.
-
-If the mechanism is plausible but hotness or material impact is unknown, mark it `needs-verification`; if it is merely a possible micro-optimization on a cold or unknown path, omit it. Map severity onto the core rubric consistently: **High** only when evidence shows wrong behavior such as an SLO/budget breach, missed real-time deadline, hang, or OOM; **Medium** for a credible material regression or unbounded scaling hazard on a demonstrated hot path; **Low** for measured minor regressions that do not threaten a contract. Speculation is not raised as a finding.
-
-`needs-verification` is not a terminal disposition for an at/above-threshold performance finding. During the current pass's main-session triage, run the proposed measurement and convert it to **accept** or **reject** before the ledger update. If a representative measurement cannot be run or constructed, stop as **verification blocked / not converged** with the missing workload, environment, or tool recorded; do not carry an unresolved material risk through later passes or call the cycle complete.
-
-The main session verifies an accepted performance risk before optimizing it:
-
-1. Use a release-equivalent build and the same representative workload, data, configuration, and machine/runtime conditions before and after the fix.
-2. Warm up where relevant and take enough repeated samples to expose noise; report the statistic appropriate to the contract (commonly median plus p95/p99 or a range), not a single wall-clock run.
-3. Compare against the pre-change baseline or explicit budget. If a performance contract is breached, make that check red on the reviewed change and green after the fix. Otherwise record the before/after measurement and confidence without inventing a pass/fail threshold.
-4. Add an automated performance guard only when the workload and environment are stable enough to avoid a flaky test. Otherwise preserve a reproducible benchmark/profile command and record the residual regression risk.
-
-Performance remains part of the Correctness ledger; do not create a permanent third review axis. For Full-tier changes, a specialist triggered by the change map joins the initial fan-out. If the general reviewer first surfaces a credible mechanism, finish that pass atomically — triage, act, and update the ledger — then schedule the specialist in the next pass.
-
-## Comment discipline
-
-Every edit the fixer makes follows the core skill's shared **Comment discipline** — default no comment; only a fact the code cannot show; precise, ~1–2 lines, decided on the first write.
+Verify before optimizing: release-equivalent build, same workload, config, and machine before and after; warm up and take enough samples to expose noise; report median plus p95/p99 or a range, never one wall-clock run; compare against baseline or budget, making a breached budget red-to-green. Add an automated guard only if it can be stable — otherwise record the reproducible command and the residual risk. Performance stays in the Correctness ledger; it is never a third axis.
 
 ## Validation
 
-Run the checks for the stacks the diff touches, plus project-specific ones from the change map:
+**Related tests only — run the cheapest thing that can fail.** Where a suite needs a device, simulator, browser, or container, a full run per pass costs more wall time than every reviewer combined, and it validates code the next pass will change.
 
-- **Rust** — `cargo build`, `cargo test`, `cargo clippy -- -D warnings`; for FFI confirm `extern "C"`/`#[no_mangle]` symbols and regenerated headers match callers.
-- **C/C++** — project build + tests; for shared libs check exported symbols (`nm -D` on Linux, `nm -gU` on macOS) and ABI drift (`abidiff` if available); release/debug parity.
-- **TS/JS** — typecheck (`tsc --noEmit`), lint, unit tests, build/bundle for changed deployables.
-- **Swift/Kotlin/Java** — platform build + tests; regenerate bindings; verify packaged native libs, manifests, permissions.
-- **Cross-cutting** — targeted contract checks: exported symbols, generated files, schema migrations, snapshot output.
-- **Performance, when a risk was accepted** — run the measurement from the performance context, capture before/after results and noise, and profile/trace the claimed mechanism when feasible. Build/test success alone does not validate a performance fix.
+- Narrow to the touched seams: `-only-testing:` / `--filter` / `-run` / one package or target.
+- Split build from run (`build-for-testing` + `test-without-building`, `cargo test --no-run`) and reuse that build for the whole pass.
+- Order by cost and stop at the first red: typecheck/compile → lint → unit → integration → UI/simulator/e2e.
+- Start validation in the same message that spawns the pass's reviewers; they only read.
+- Broad suite **once**, in the final pass, plus any target whose code changed since it last passed.
+- Never rebuild under a running test process, and never re-run a suite for files untouched since it was green.
 
-## Fix-readiness gate (the fix-loop's completion check)
+Per stack: **Rust** — `cargo build`, `cargo test`, `cargo clippy -- -D warnings`, plus `extern "C"`/`#[no_mangle]` symbols and regenerated headers matching callers. **C/C++** — build + tests, exported symbols (`nm`), ABI drift (`abidiff`), release/debug parity. **TS/JS** — `tsc --noEmit`, lint, unit, build for changed deployables. **Swift/Kotlin/Java** — platform build + tests, regenerated bindings, packaged native libs, manifests, permissions. **Cross-cutting** — exported symbols, generated files, schema migrations, snapshot output.
 
-Symmetric to the plan loop's execution-readiness gate. Before the Stop rule may end the loop, confirm for **every accepted finding**:
+## Fix-readiness gate
 
-- it has a fix applied in the main session;
-- a non-performance correctness finding has a **regression test at a correct seam** that now passes and was red before the fix — **or** the absence of a correct seam is recorded as residual risk. A too-shallow seam (a unit test that can't reproduce the real call pattern) gives false confidence; say so rather than asserting coverage.
-- an accepted performance finding has representative before/after measurements; a breached performance contract has a red-to-green budget check; and an automated guard exists only when it can be stable — otherwise the reproducible measurement method and residual risk are recorded.
-- Validation ran for the touched stacks, with output captured;
-- the ledger entry records: `finding → accept/reject (why) → fix → validation → residual risk`.
+**At Lightweight, four items and nothing else:** every accepted finding fixed; one red-to-green check on the behavior the loop was called about; validation run for the touched target; ledger recorded.
 
-If any is missing, the loop is not done regardless of finding count: fix the gap in another pass within the cap, otherwise stop and report **not converged** with the gap listed.
+At Standard and Full, for **every accepted finding**: a fix applied in the main session; for a non-performance correctness finding, a regression test at a correct seam passing now and red before — or the absence of a correct seam recorded as residual risk (a too-shallow seam is false confidence, so say so instead of claiming coverage); for a performance finding, before/after measurements, a red-to-green budget check if a contract was breached, and a guard only where stable; validation run for the touched stacks with output captured; a ledger entry reading `finding → accept/reject (why) → fix → validation → residual risk`. A gap means the loop is not done regardless of finding count: close it within the cap, else stop as **not converged**, naming the gap.
 
-## Review checklist (single source — inject into the Correctness prompt)
+## Review checklist (inject into the Correctness prompt; only areas the diff touches)
 
-Check only the areas the diff touches:
-
-- **Behavior parity** — every mode/path/platform affected, including old behavior that must stay.
-- **Contracts** — signatures, public APIs, FFI/ABI, generated bindings, serialization, migrations, config defaults, CLI/API compatibility — including external callers of a changed contract that weren't updated.
-- **Build/packaging** — compiled libs, architecture/platform slices, bundled assets, plugins, manifests, release/debug divergence.
-- **Lifecycle/concurrency** — init/shutdown, pause/resume, cancellation, threading/async, ownership, resource cleanup, lock ordering, races.
-- **Native/media safety** (C/C++/Rust/media) — memory safety, lifetimes, `unsafe`, error ownership; GPU/decoder/audio/video resource lifetime and frame timing/sync.
-- **Performance, when touched** — accidental complexity growth; repeated copying/allocation/serialization; N+1 or redundant network/disk/database work; blocking or serialized work in async/UI paths; lock contention; excessive renders/layout; ineffective cache use; unbounded queues/buffers; backpressure; startup, bundle/binary, CPU, memory, battery, throughput, or latency regressions. Apply the Performance findings evidence gate; do not report generic “could be faster” advice.
-- **Data/input** — parsing, escaping, Unicode, paths, missing/malformed input, old saved state, precision/overflow.
-- **Security/privacy** — auth/secrets, certs, permissions, sandboxing, untrusted input, dependency/plugin loading.
-- **UI** (when changed) — navigation, state persistence, disabled/loading/error states, accessibility, responsive layout, text overflow, stale controls.
+- **Behavior parity** — every mode, path, and platform affected, including old behavior that must stay.
+- **Contracts** — signatures, public APIs, FFI/ABI, bindings, serialization, migrations, config defaults, CLI compatibility; external callers left un-updated.
+- **Build/packaging** — libs, platform slices, assets, plugins, manifests, release/debug divergence.
+- **Lifecycle/concurrency** — init/shutdown, pause/resume, cancellation, threading, ownership, cleanup, lock ordering, races.
+- **Native/media safety** — memory safety, lifetimes, `unsafe`, error ownership; GPU/decoder/audio buffer lifetime and frame timing.
+- **Performance** (only per the gate above) — added complexity, repeated copying/allocation, N+1 I/O, blocking in async or UI paths, contention, excess renders, unbounded queues, backpressure, startup/bundle/CPU/memory/battery regressions. No generic "could be faster".
+- **Data/input** — parsing, escaping, Unicode, paths, malformed or missing input, old saved state, precision/overflow.
+- **Security/privacy** — auth, secrets, certs, permissions, sandboxing, untrusted input, dependency loading.
+- **UI** — navigation, state persistence, disabled/loading/error states, accessibility, responsive layout, overflow, stale controls.
 - **Tests** — missing coverage for changed contracts, edge cases, target platforms.
-- **Simplicity** — over-complex logic, needless abstraction, avoidable branching/state, readability even when correct.
-- **Comments** — comments that narrate what the code already states, restate the change, or reference this review/task (Low — prefer deleting the comment or simplifying the code over rewording it).
+- **Simplicity** — over-complex logic, needless abstraction, avoidable branching or state.
+- **Comments** — narration, restating the change, or referencing this review (Low; prefer deleting the comment or simplifying the code).
 
-## Scopes (for multi-reviewer fan-out)
+## Reviewer prompts
 
-- **Native (C/C++/Rust)** — memory safety, ownership/lifetimes, `unsafe`, FFI/ABI, threading, error handling, feature flags, build outputs.
-- **Media/graphics** — decode/render/audio pipelines, buffer ownership, frame timing/sync, GPU/decoder resource lifecycle, backend differences.
-- **Mobile/desktop** — Swift/Kotlin/Java lifecycle, persistence, permissions, platform services/viewmodels/controllers, packaged native libs.
-- **Web/UI** — TS/JS types, async state, routing, API contracts, forms, accessibility, responsive behavior, build output.
-- **Packaging/contracts** — artifacts, generated bindings, schemas, migrations, platform filters, compatibility.
-- **Performance (conditional)** — the performance mechanisms relevant to any stack, plus whether the supplied workload, metric/budget, and validation method can confirm material impact. Use only for a performance-sensitive diff or a credible risk surfaced during the pass.
+Specialize with the change map, diff-scope command, and scope; inject the checklist, severity rubric, and one-shot contract.
 
-With one reviewer, fold the relevant scopes into one prompt.
+**Correctness:** "Read-only review — do not edit files. Run `<diff-scope command>` to read the change; you may read the rest of the tree to see how changed contracts are used, but run no build, test, lint, benchmark, or profiler commands — measurement belongs to the main session. Judge the change against the stated intent and changed contracts, using the project's glossary terms exactly and respecting ADRs in the touched area (to reopen one, say so and why). Audit only the areas the diff touches, per the injected checklist; skip what the formatter or linter handles; mark anything you are unsure of `needs-verification`. Two things are out of bounds: restating what the change does, and reporting behavior the stated intent never asked for — judge the diff against that intent, not against the feature you would have built. If you believe the intent is too narrow, say so in one line labelled `scope note`, which routes to the user, who owns scope. For a performance finding, give mechanism, hotness evidence, expected metric, and verification method. For a complexity finding, optionally give a **minimal fix**, and a **structural refactor** only if warranted, with its trade-offs."
 
-## Reviewer prompt (base) — Correctness axis
+**Spec:** "Read-only spec review — do not edit files. Run `<diff-scope command>`, and read the spec at `<path or contents>` (absent one, the stated intent/acceptance goals). Report **every** spec-conformance finding and only those: **(a)** requirements missing or partial; **(b)** behavior the spec never asked for (scope creep); **(c)** requirements implemented wrongly. Quote the spec or intent line for each, with file + line where relevant, using glossary terms exactly. No code-quality findings — that is the other axis. Neither spec nor intent given ⇒ reply 'no spec available'. Run no builds or tests."
 
-Specialize with the change map, diff-scope command, and scope; inject the Review checklist, severity rubric, and one-shot report contract:
+## Final output (core skeleton, plus)
 
-"Read-only review — do not edit files. Run `<diff-scope command>` to read the change; you may read the rest of the tree to check how changed contracts are used (e.g. grep for callers of a changed signature), but run no build/test/lint commands. Review the change against the stated intent and changed contracts. Use the project's domain glossary terms exactly, and respect ADRs in the touched area — don't re-litigate a settled decision; if you think one should be reopened, say so and why.
-
-List all actionable findings first — the injected one-shot report contract applies — ordered by severity per the injected rubric (High/Medium/Low), each with file + line and a one-line justification. Audit only the areas the diff touches, per the injected Review checklist. Skip style the formatter/linter handles; if unsure a finding is real, mark it `needs-verification` rather than asserting it.
-
-For a performance finding, include the mechanism, hotness evidence, expected metric, and verification method in the evidence field. Call it a confirmed regression only when supplied measurements support that claim; otherwise use `needs-verification`. Omit cold-path micro-optimizations and generic advice. Do not run builds, benchmarks, profilers, tests, or linters — measurement belongs to main-session validation.
-
-For a complexity finding, optionally suggest a **minimal fix** (low-risk) and, only if warranted, a **structural refactor** (deeper redesign, with tradeoffs). If nothing is at/above Medium, say so. Do not edit files."
-
-## Spec reviewer prompt (base) — Spec axis
-
-Specialize with the change map, diff-scope command, and spec source:
-
-"Read-only spec review — do not edit files. Run `<diff-scope command>` to see the change, and read the spec at `<path or contents>` (or, if no written spec exists, the stated intent/acceptance goals given above). Report **every** spec-conformance finding and only those (the injected one-shot report contract applies), ordered by severity: **(a)** requirements the spec asked for that are missing or partial; **(b)** behavior the spec didn't ask for (scope creep); **(c)** requirements that look implemented but appear wrong. Quote the spec (or intent) line for each finding, with the file + line in the diff where relevant. Use the project's domain glossary terms exactly. Do not report code-quality issues — that is the other axis. If neither a spec nor stated intent was provided, reply 'no spec available'. Do not run builds, benchmarks, profilers, tests, or linters; validation belongs to the main session. Do not edit files."
-
-## Final output (core skeleton, specialized — in the user's language, per core)
-
-- Passes run and why the loop stopped (threshold met / cap hit / not converged / verification blocked).
-- Fix summary + finding ledger (including rejected findings and why).
-- Validation commands run and results; fix-readiness gate result.
-- Performance risks: accepted/rejected/needs-verification dispositions, baseline versus fixed measurements and confidence, or “not performance-sensitive”.
-- Spec-axis result: missing/partial requirements, scope creep, and wrong implementations — or "no spec available".
-- Simplicity improvements made, or why none; chosen path (minimal vs structural) when complexity findings existed.
-- Open findings below threshold, listed not fixed.
+- Fix summary and the ledger, rejected findings included.
+- Validation commands run and their results; fix-readiness gate result.
+- Performance dispositions with before/after and confidence — or "not performance-sensitive".
+- Spec axis: missing or partial requirements, scope creep, wrong implementations — or "no spec available".
+- Simplicity changes made, or why none; minimal versus structural where complexity findings existed.

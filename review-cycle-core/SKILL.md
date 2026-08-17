@@ -5,85 +5,92 @@ description: Use when running review-plan-cycle or review-fix-cycle, or when eit
 
 # review-cycle-core
 
-Shared machinery for `review-plan-cycle` (subject = an implementation plan) and `review-fix-cycle` (subject = a code diff): those skills supply the *subject* and their checklists, this one supplies the *loop*. Leading idea: every pass uses a **fresh-context, read-only** reviewer, so the session that produced the work never reviews its own reasoning.
+The *loop* behind `review-plan-cycle` (subject = a plan) and `review-fix-cycle` (subject = a diff); those skills supply the subject and the checklists. Every pass uses a **fresh-context, read-only** reviewer, so the session that produced the work never reviews its own reasoning.
 
-## Effort tier (choose once, before pass 1)
+## Two standing limits (they override everything else)
 
-Scale the loop to the subject's size and risk — everything below is the *full* tier; don't pay it on a small change.
+1. **Stay on the work at hand** — the subject, against the intent the user stated. No adjacent bug hunts, no "while we're here" hardening, no new surfaces, no unrequested refactors. Worthwhile work outside the subject is *one line in the final output, routed to the user*.
+2. **Validate with related checks only** — what covers the touched seams. Broad, device, simulator, or e2e runs happen once, at the end.
 
-- **Lightweight** — small, low blast radius, at most one risk class (a localized fix, a plan with a handful of steps): one reviewer folding all relevant scopes, one pass (cap 1), the calling skill's gate reduced to the items the subject touches, no Design It Twice.
-- **Full** — large, or touches multiple risk classes, public contracts, concurrency/lifecycle, persisted/wire state, or security: fan out by scope, pass cap per the Stop rule, full gate, Design It Twice available.
+This loop's failure mode is not missing bugs; it is spending the user's time and growing a small change into a large one.
 
-When unsure, start Lightweight and escalate only if pass 1 surfaces anything at/above threshold in a risk class — escalating costs one pass; starting Full on a trivial change costs every pass.
+## Effort tier (choose once, before pass 1 — and say the price out loud)
+
+Size from the *subject*, not from how important the work feels.
+
+| | **Lightweight** | **Standard** | **Full** |
+|---|---|---|---|
+| when | ≤ ~3 files / ~150 lines or plan steps, one risk class, no changed contract | neither column fits | changed public contract, wire/on-disk format, concurrency or lifecycle ownership, security, migration, or ≥ ~10 files |
+| reviewers/pass | **1** — every scope *and* the calling skill's second axis as labelled sections of one prompt | 2 (one per axis) | one per disjoint scope, plus the second axis |
+| pass cap | **1** | 2 | 4 (8 only if the user asked for exhaustive) |
+| gate | items the subject touches | full, minus untouched stacks | full |
+| Design It Twice | no | load-bearing decisions only | available |
+
+**Lightweight is the default whenever the fixer could re-read the whole subject in one sitting.** Announce tier and price before spawning ("Lightweight: 1 reviewer, 1 pass, ~3 min") — a loop whose cost the user cannot see is one they cannot decline. On any signal of urgency, drop a tier, say so, and name what it skips.
+
+**Escalate only for a High, or a Medium in a risk class the scope named.** Every other Medium is fixed, deferred, or recorded as residual risk within the cap: reviewers regenerate Mediums indefinitely, so treating each as an escalation makes a two-file change cost four passes.
 
 ## The loop
 
-1. **Scope** (main session, once) — defined by the calling skill (plan scope or change map).
-2. **Spawn a fresh reviewer** — read-only, cannot edit (see *Spawning*); fan out one per disjoint scope for large or cross-stack subjects.
-3. **Triage** in the main session — never blind-apply (see *Triage discipline*).
-4. **Act** on accepted findings — main session only.
-5. **Record** in the ledger.
-6. **Repeat** with a new fresh reviewer, passing the ledger; stop per the *Stop rule*.
+1. **Scope** once (the calling skill's plan scope / change map).
+2. **Spawn the pass's reviewers in one message** — read-only, in the background — and in that same message start anything not depending on their findings (validation, a measurement). Reviewers only read, so nothing races them, and their wall time is the loop's dominant cost.
+3. **Wait by working, never by polling** — the harness notifies you. Don't idle, sleep, or re-spawn to check.
+4. **Triage** in the main session, **act** there too (reviewers never edit), **record** in the ledger.
+5. **Repeat only if the Stop rule says to**, scoping the next reviewer to *the delta plus the mechanism that changed*, carrying the ledger. Re-auditing settled hunks re-derives context you already paid for and duplicates findings.
 
-A pass is **atomic**: one complete findings report → triage all of it → act on every accepted finding → one ledger update → only then the next reviewer. Never interleave fix-one/review-one — that burns the cap one finding at a time and presents as oscillation. A report that comes back as a single issue or short summary means the one-shot report contract was missing from its prompt; fix the prompt, don't spend passes rediscovering withheld findings.
+A pass is **atomic**: one full report per axis → triage all of it → act on every accepted finding → one ledger update → then the next pass. Never fix-one/review-one; it burns the cap one finding at a time and reads as oscillation. A report arriving as a single issue or a summary means the one-shot contract was missing from the prompt — fix the prompt, don't spend a pass rediscovering what was withheld.
 
-## Spawning a fresh reviewer
+## Spawning
 
-- **Claude Code**: the Agent/Task subagent tool (not the to-do `TaskCreate`) with `subagent_type: "Explore"`; fan out via multiple tool calls in one message. The subagent's return value is its findings — triage in the main session.
-- **Codex**: spawn an `explorer` with `fork_context: false` and a self-contained prompt (scope + reviewer prompt + assigned sub-scope). GPT-based reviewers follow explicit block-structured contracts far better than prose norms: wrap the prompt in tags — `<task>`, `<severity_rubric>`, `<ledger_factual>`, `<output_contract>` (the one-shot report contract) — and remember the agent's *final message* is the whole deliverable. If no subagent tool is available, run a fresh read-only CLI process (e.g. `codex exec` with a read-only sandbox) on the same prompt.
-- **Fresh** means a separate agent — never the current session reviewing its own work, not even as a fallback when spawning is unavailable (that is **blocked**, per the Stop rule).
+- **Claude Code** — the Agent/Task subagent tool (not `TaskCreate`), `subagent_type: "Explore"`, parallel calls in one message, backgrounded so the user can interject.
+- **Codex** — an `explorer` with `fork_context: false` and a self-contained prompt; GPT reviewers follow tagged blocks (`<task>`, `<severity_rubric>`, `<ledger_factual>`, `<output_contract>`) far better than prose, and their *final message* is the whole deliverable. No subagent tool ⇒ a fresh read-only CLI process (`codex exec`, read-only sandbox).
+- **Fresh means a separate agent.** The current session never reviews its own work, not even as a fallback; unavailable spawning is **blocked** (Stop rule).
+- **Model** — inherit the session's for judgement-heavy scopes (memory safety, concurrency, contracts, security); a cheaper, faster one suffices for mechanical scopes (comment discipline, test seams, packaging, glossary). Never trade strength on a named risk class.
 
-## One-shot report contract (inject verbatim, alongside the severity rubric)
+## One-shot report contract (inject verbatim, with the severity rubric)
 
-A reviewer reports once and is never consulted again; anything held back costs a full extra pass to rediscover — and GPT-based reviewers especially tend to stop at the first plausible issue and compress their final message unless the prompt forbids both. Inject into every reviewer prompt:
+A reviewer reports once and is never consulted again; anything withheld costs a whole pass to rediscover.
 
-"Your final message is your entire deliverable and your only report — there are no follow-up questions. Enumerate every finding you can defend in this one response, not just the most severe: after the first plausible issue, keep auditing until your assigned scope is exhausted (second-order failures, empty/error states, retries, stale state, rollback). Do not truncate for brevity. Format: one line per finding — `[High|Medium|Low] <file:line or plan step> — <defect> — <evidence> — <new | already-settled-in-ledger>`. If nothing is at/above Medium, say exactly that."
+"Your final message is your entire deliverable and your only report — there are no follow-up questions. Enumerate every finding you can defend here, not just the most severe: after the first plausible issue keep auditing until your scope is exhausted (second-order failures, empty/error states, retries, stale state, rollback).
 
-A finding tagged `already-settled-in-ledger` routes to the Stop rule's oscillation/corroboration check instead of fresh triage.
+One line per finding — `[High|Medium|Low] <file:line or plan step> — <defect> — <evidence> — <new | already-settled-in-ledger>`. Evidence: two sentences at most; a claim needing more is a guess, so mark it `needs-verification` and name the one check that would settle it. At most 10 findings — past that, report the 10 that matter and say you truncated. No preamble, no restating what the subject does, no summary of your reasoning: the main session wrote it and has read it.
 
-## Triage discipline
+If nothing is at/above Medium, say exactly that and stop — a padded report costs an extra pass."
 
-- Never blind-apply. Mark each finding with one of the calling skill's disposition states and record **why** — fresh reviewers guess wrong (taste calls, `unsafe`/lifetimes/FFI/threading; architectural preference is not automatically correct).
-- A high-impact finding (memory safety, ABI/contract break, data loss, security, or a change to architecture/lifecycle/state ownership) gets **at most one more** read-only reviewer this pass to confirm before acting.
-- A finding the reviewer itself was unsure of must resolve into a real disposition: a feasibility/technical doubt gets that one confirming reviewer; a product/scope decision only the user can make (priorities, intent, acceptable trade-offs) means **stop and ask the user** rather than letting reviewers churn on an undecidable point.
+`already-settled-in-ledger` routes to the Stop rule's oscillation/corroboration check, not to fresh triage.
 
-## Adjudicating a rejected finding (no extra spawn)
+## Triage
 
-Rejecting an at/above-threshold finding is the author overruling a fresh reviewer on the author's own work — the one place the loop's independence breaks. Guard it without a dedicated reviewer: the rejection is *provisional for one pass* and resolves inside the next pass's reviewer, which was being spawned anyway. (Below-threshold findings need none of this — reject them freely.)
+Never blind-apply. Give every finding a disposition (the calling skill's states) and record **why** — fresh reviewers guess wrong on taste, `unsafe`, lifetimes, FFI, threading, and architectural preference is not automatically correct.
 
-- The general reviewer never sees the rejection rationale (the ledger split). If it independently **re-raises** the finding, that is corroboration: reopen and re-triage — not oscillation (see Stop rule).
-- If it does **not**, append a targeted question to that same reviewer's prompt: quote the finding and the rejection rationale, ask "Is this rejection sound? Default to *unsound* if uncertain." Upheld → the rejection settles and its rationale enters the ledger normally; unsound → reopen and re-triage. This adds tokens, not a round-trip.
-- **Terminal case** — if no further pass will run (Stop rule met, cap hit, Lightweight's single pass), don't spawn to adjudicate: carry the contested rejection into the Final output as an open item routed to the user, with the finding and the rationale. The user, not another reviewer, breaks the last tie.
+**Classify before accepting** (limit 1):
+
+- a defect in the requested behavior → fix now.
+- the same defect on a path the user didn't mention → fix only if it is the same mechanism and the same edit; otherwise record it and tell the user.
+- new behavior, a new surface, a new abstraction → **don't build it**; one line to the user. This is how a 15-line change becomes 60 lines nobody asked for. Widening also invalidates the tier — re-size first.
+
+**Confirming a high-impact finding** (memory safety, ABI/contract break, data loss, security, a change to architecture/lifecycle/state ownership): at most one extra read-only reviewer this pass — but at Lightweight confirm it yourself by reading and quoting the cited code, spawning only if the claim turns on code you cannot reach.
+
+**A reviewer's own uncertainty** must resolve: technical doubt → that one confirming reviewer; a scope, priority, or trade-off call only the user can make → **stop and ask the user**.
+
+**Rejecting an at/above-threshold finding** is the author overruling a fresh reviewer on their own work — the one place independence breaks. The rejection is provisional for one pass and resolves in the next reviewer, which was being spawned anyway: the ledger split withholds the rationale, so an independent re-raise is corroboration (reopen, re-triage once); if it doesn't re-raise, append to that prompt "Is this rejection sound? Default to *unsound* if uncertain," quoting the finding and the rationale. Terminal case — no further pass (threshold met, cap hit, Lightweight's single pass): carry the contested rejection into the final output and let the user break the tie.
 
 ## Respect what's already settled
 
-Before pass 1 and in every reviewer prompt:
+Read the standing-instructions file (`CLAUDE.md` / `AGENTS.md`, plus `CONTEXT.md`) before pass 1 and fold into every reviewer prompt: **(a)** decisions the project has settled — honor them like ADRs, and don't raise concerns they rule out (lockstep co-deployed repos make backward-compat and migration concerns non-issues); **(b)** the failure classes it documents — make pass 1 adversarial on those. Use the domain glossary's terms (`CONTEXT.md` / `UBIQUITOUS_LANGUAGE.md`) exactly in findings, ledger, and refined work. Don't re-litigate an ADR in the touched area; a reviewer wanting one reopened must say so and why. Offer a new ADR when a pass settles a load-bearing, hard-to-reverse trade-off. Raising a ruled-out concern is noise; re-raising it is oscillation.
 
-- **Standing decisions & hazard classes** — read the project's standing-instructions file (`CLAUDE.md` under Claude Code, `AGENTS.md` under Codex, plus `CONTEXT.md` if present) and fold both into every reviewer prompt: **(a)** decisions the project has settled — honor them like ADRs, don't raise concerns they declare out of bounds (e.g. lockstep co-deployed repos make backward-compat/old-client/migration concerns non-issues); **(b)** the recurring failure classes the project documents — make pass 1 adversarial on those modes, not merely broad. Raising a ruled-out concern is noise; re-raising it across passes is oscillation.
-- **Ubiquitous language** — read the domain glossary (`CONTEXT.md` / `UBIQUITOUS_LANGUAGE.md` if present) and use its terms exactly in findings, ledger, and refined work — consistent terms are what let the next pass *act* on a finding instead of re-interpreting it.
-- **Respect ADRs** — don't re-litigate a decision an ADR in the touched area settled; a reviewer wanting to reopen one must say so explicitly and why. Re-raising settled decisions is a top cause of oscillation.
-- **Offer an ADR** when a pass settles a load-bearing decision that is hard to reverse, surprising without context, and a real trade-off — so future passes and readers don't re-raise it. Skip ephemeral or self-evident reasons.
+## Comment discipline (fixes apply it; a plan writes it into its conventions)
 
-## Comment discipline (shared — fixes apply it, plans carry it)
-
-Applies to every edit the fixer makes; a plan hands it to the implementer by writing it into the plan's conventions (the implementer won't infer it):
-
-- Default to **no comment** — clearer names, smaller functions, and removed dead branches beat a comment that explains them. A finding that says "add a comment to explain this" is usually a signal to **simplify the code** instead; prefer that, and reject the comment if the simplification removes the confusion.
-- A comment is justified only when it records something the code cannot show: a non-obvious invariant, a why-not-the-obvious-way, a known hazard/workaround with its cause, or a contract a caller must honor. Decide it is **absolutely** necessary by that test before writing — on the first write, not after a reminder.
-- When warranted, state the fact precisely — no narrating what the line does, no "fixed X" or references to the review/plan/task, no commented-out code — capped at ~1–2 lines even in a comment-dense file; matching surrounding density never licenses verbosity.
+Default to **no comment** — clearer names, smaller functions, and deleted dead branches beat a comment explaining them. A finding that says "add a comment here" usually means **simplify the code**: do that and reject the comment. A comment is justified only for what the code cannot show — a non-obvious invariant, a why-not-the-obvious-way, a hazard or workaround with its cause, a contract a caller must honor — decided on the first write, ~1–2 lines, no narration, no "fixed X", no reference to this review, no commented-out code.
 
 ## The ledger
 
-Append-only across passes. Entry: `finding → disposition (why) → change → [skill-specific fields]`.
+Append-only: `finding → disposition (why) → change → [skill-specific fields]`. Pass it to the next reviewer in two parts, so anti-oscillation doesn't cost independence:
 
-Pass it to the next reviewer split in two, so anti-oscillation doesn't cost independence:
+- **Factual** (always) — what changed, and any new invariant the work now depends on.
+- **Rationale** — for accepted and deferred findings; **withheld** for a still-open at/above-threshold finding the author rejected.
 
-- **Factual** (always passed) — what changed, plus any new invariant the refined work now depends on. Lets the reviewer build on settled work instead of re-deriving it, and check the prior decisions.
-- **Rationale** — passed for **accepted** and **deferred** findings, **withheld** for a still-open at/above-threshold finding the author **rejected**: don't hand the reviewer the reason a live concern was dismissed. An independent re-raise is then corroboration, not oscillation (see Stop rule).
-
-## Severity (same scale every pass — inject verbatim into every reviewer prompt)
-
-The stop threshold keys on this scale, so a fresh reviewer must use these definitions, not its own.
+## Severity (inject verbatim; the threshold keys on it)
 
 - **High** — wrong behavior, data loss, a broken/incompatible contract, a memory-safety/security defect, or a plan step that will produce one. Blocks convergence.
 - **Medium** — correct but fragile, unmaintainable, or under-specified: a latent hazard, a missing test at a real seam, a shallow or leaky design that will cost the next change.
@@ -91,19 +98,18 @@ The stop threshold keys on this scale, so a fresh reviewer must use these defini
 
 ## Stop rule
 
-Stop when **either** the reviewer reports nothing at/above the threshold **or** the pass cap is hit (default **8**; **1** in Lightweight). Thresholds and cap are overridable in the scope.
+Stop on **any** of: nothing at/above threshold; the tier's cap (1 / 2 / 4, overridable in the scope); or the **ship condition** — requested work implemented and validated, every open finding below threshold or an accepted residual risk in the ledger. The loop protects the deliverable; it does not outlast it.
 
-- A **new** finding (even another High) is normal — keep going within the cap.
-- **Oscillation** — a concern returning after being **settled** (accepted or rejected) in the ledger, however reworded — stops the loop early. A **deferred** finding resurfacing is *not* oscillation; it was never decided.
-- **Not oscillation:** a rejected finding independently re-raised by a reviewer that (per the ledger split) never saw the rejection rationale — that is corroboration. Reopen and re-triage **once**; if rejected again with the rationale now shown to the reviewer and it still returns, that is oscillation and stops the loop.
-- If passes oscillate, or the cap is hit with open High items, stop and report **not converged** with the open list.
-- If a reviewer can't run (quota/tool failure), report **blocked** (the calling skill may name it "review blocked" / "verification blocked"), not complete.
-- Don't chase literal zero findings — reviews regenerate taste-based nits indefinitely.
+- A **new** finding (even a High) is normal — continue within the cap.
+- **Oscillation** — a *settled* concern returning, however reworded — ends the loop early. A **deferred** finding resurfacing is not oscillation; it was never decided. A rejected finding re-raised by a reviewer that never saw the rationale is corroboration: re-triage once; if it returns after the rationale was shown, that is oscillation.
+- Cap hit with open Highs, or oscillation ⇒ **not converged**, with the open list. A reviewer that can't run ⇒ **blocked**, not complete.
+- Don't chase zero findings; reviews regenerate nits indefinitely.
 
-## Final output (shared skeleton; the calling skill adds specifics)
+## Final output (skeleton; the calling skill adds specifics)
 
-- **User's language** — write the final report, verdicts, and every question routed to the user in the language the user invoked the loop in (English request → English report; 中文请求 → 中文报告). Internal artifacts (reviewer prompts, ledger entries) may stay in English; the synthesis the user reads must not. Glossary/domain terms keep their exact original form either way.
-- Passes run and why the loop stopped (threshold met / cap hit / not converged / blocked).
-- The finding ledger, including rejected and deferred findings and why.
-- Open findings below threshold, listed not fixed; open questions routed to the user.
-- Domain/ADR notes: terms adopted, ADRs respected, any ADR proposed.
+Write it — and every question routed to the user — in the language the user used (English request → English report; 中文请求 → 中文报告). Internal artifacts may stay English; glossary terms keep their original form.
+
+- Tier, passes run, reviewers spawned, and why the loop stopped (threshold / cap / ship condition / not converged / blocked) — the price belongs next to the result.
+- The ledger, including rejected and deferred findings and why.
+- Open findings below threshold, listed not fixed; questions routed to the user.
+- Domain/ADR notes: terms adopted, ADRs respected, any proposed.
