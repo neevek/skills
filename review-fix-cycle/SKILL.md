@@ -9,7 +9,7 @@ Review-fix passes over a code **diff** until findings fall below the stop thresh
 
 **REQUIRED SUB-SKILL:** load `review-cycle-core` for the loop — effort tiers, parallel spawning, the one-shot report contract, triage, the ledger, the anti-oscillation protocol, the stop rule, comment and ADR/glossary discipline. This skill adds only the diff specifics.
 
-**The core's three standing limits bind here:** spawn both axes (at Full, every scope) concurrently in one message alongside validation; validate with the narrowest targets covering the touched seams; review *this diff* against the stated intent and nothing wider — a finding that would grow it goes to the user, not into the code.
+**The core's four standing limits bind here:** spawn both axes (at Full, every scope) concurrently in one message alongside only validation that will remain valid; validate with the narrowest targets covering the touched seams; review *this diff* against the stated intent and nothing wider — a finding that would grow it goes to the user, not into the code; optimize duplicate work, never reviewer thinking time.
 
 ## Change map (core step 1)
 
@@ -18,9 +18,14 @@ A few lines before pass 1. Write **"n/a"** rather than inventing content: an ima
 - intent / acceptance goals.
 - diff-scope command — `git show HEAD` (or `<ref>`), `git diff --merge-base origin/main`, `git diff` / `--staged`. Exclude generated and vendored files; review the source that produces them.
 - changed contracts — boundaries outside the diff that depend on it, so a break is silent: exported APIs, RPC/API shapes, UI props/events/tokens, cross-language or cross-process seams, wire/on-disk formats, persisted or cached state, config/flags, packaged or generated output.
+- **boundary behavior** when the change is event-driven, asynchronous, cached, streamed, or cross-component — identify the actual producer and consumer; what happens while idle/quiescent, empty, paused, disconnected, or backpressured; what wakes or retries the path; and which event proves completion. Read only the directly involved boundary code before pass 1 instead of paying later passes to discover its contract.
 - **validation targets** — the narrowest command per touched stack, named here so no pass has to guess. Say whether anything is cross-cutting enough to justify one broad run at the end; default is no.
 - performance context **when touched** — hot path or scaling boundary, representative workload, metric or budget, known baseline, reproducible measurement command. No budget or baseline ⇒ say so, don't invent one.
 - spec source — the issue/PRD the diff implements; absent one, the Spec axis runs against the intent above. Skip that axis only when neither exists.
+
+## Scope-expansion gate
+
+Inspect direct dependencies and adjacent repositories read-only when needed to map a changed boundary. If an accepted fix would require mutating a repository, service, public API, generated artifact pipeline, platform, or deliverable the user did not already place in scope, stop before editing it: report the dependency, why the in-scope change cannot satisfy the acceptance goal alone, and the smallest expansion needed. After authorization, re-tier whenever the expansion adds a core floor-triggering contract, boundary, or risk class; never let review silently broaden the assignment.
 
 ## Two axes per pass, always concurrent
 
@@ -41,6 +46,8 @@ A finding asserting **wrong behavior** needs a check that goes red on that sympt
 
 **Cheapest red check on a fix already written: invert the fix, not the bug.** Disable the new mechanism in place (`if false, …`, revert the default, comment the guard), watch the new test fail, restore, watch it pass — one build, no harness, and it proves the test binds to *this* mechanism. Never leave the inverted state behind.
 
+When several accepted findings share a build target, batch independent regression checks: add all tests, invert each new mechanism in one temporary patch, run the individually named tests together so every expected failure stays attributable, restore the mechanisms together, then compile and run green once. Split the batch only when inversions interact or obscure which contract failed.
+
 ## Performance (conditional, evidence-gated)
 
 **If the change map's performance context is "n/a", skip this section and leave performance out of the prompts.** Most diffs aren't performance-sensitive; asking anyway buys speculation you then have to triage.
@@ -57,16 +64,19 @@ Measure before optimizing: release-equivalent build, same workload, config, and 
 
 - Narrow to the touched seams: `-only-testing:` / `--filter` / `-run` / one package or target. Can't name a narrow target ⇒ say so and pick the smallest package containing the seam; never fall back to everything.
 - Split build from run (`build-for-testing` + `test-without-building`, `cargo test --no-run`) and reuse that build for the whole pass.
+- Keep a validation ledger: target → relevant source/dependency paths + build/runtime inputs + external-state assumptions → last green revision/state → clean/dirty. Reuse a green result only while every declared input and relevant external state remains unchanged; configuration, generated artifacts, schemas, services, devices, browsers, simulators, toolchains, and environment can dirty a target without a source edit.
+- Apply every accepted production fix and test edit for the pass before compiling. Build each dirty target once after the batch, then reuse it for every related run.
 - Order by cost, stop at the first red: typecheck/compile → lint → unit → integration → UI/simulator/e2e.
-- Start validation in the pass's spawn message, concurrent with the reviewers.
+- Start only stable validation in the pass's spawn message. A target covering code reviewers are likely to change waits until triage and the batched fix; an unchanged dependency check or baseline measurement may run concurrently.
+- Defer expensive integration, device, simulator, browser, and UI journeys until no accepted cheaper-seam finding remains. Run one earlier only when it is itself the narrowest red/green seam for an accepted finding.
 - A broad, device, simulator, browser, or e2e run happens **only** if the change map flagged something cross-cutting — then once, in the final pass, plus any target whose code changed since it last passed.
-- Never rebuild under a running test process, and never re-run a target for files untouched since it was green.
+- Never rebuild under a running test process, and never re-run a target whose declared build inputs, runtime inputs, dependencies, and relevant external state are all unchanged since it was green.
 
 Per stack: **Rust** — `cargo build`, `cargo test`, `cargo clippy -- -D warnings`, plus `extern "C"`/`#[no_mangle]` symbols and regenerated headers matching callers. **C/C++** — build + tests, exported symbols (`nm`), ABI drift (`abidiff`), release/debug parity. **TS/JS** — `tsc --noEmit`, lint, unit, build for changed deployables. **Swift/Kotlin/Java** — platform build + tests, regenerated bindings, packaged native libs, manifests, permissions. **Cross-cutting** — exported symbols, generated files, schema migrations, snapshot output.
 
 ## Fix-readiness gate
 
-**At Lightweight, four items and nothing else:** every accepted finding fixed; one red-to-green check on the behavior the loop was called about; the scoped validation target run; ledger recorded.
+**At Lightweight, four items and nothing else:** every accepted finding fixed; one red-to-green check on the correctness behavior the loop was called about, or the Performance section's representative before/after evidence for an accepted performance finding; the scoped validation target run; ledger recorded. The performance evidence gate applies at every tier.
 
 At Standard and Full, for **every accepted finding**: a fix applied in the main session; for a non-performance correctness finding, a regression test at a correct seam, passing now and red before — or the absence of a correct seam recorded as residual risk (a too-shallow seam is false confidence, so say so instead of claiming coverage); for a performance finding, before/after measurements, a red-to-green budget check if a contract was breached, and a guard only where stable; scoped validation run for the touched stacks with output captured; a ledger entry reading `key → finding → accept/reject (why) → fix → validation → residual risk`. A gap means the loop is not done regardless of finding count: close it within the cap, else stop as **not converged**, naming the gap.
 
@@ -75,7 +85,7 @@ At Standard and Full, for **every accepted finding**: a fix applied in the main 
 - **Behavior parity** — every mode, path, and platform affected, including old behavior that must stay.
 - **Contracts** — signatures, public APIs, FFI/ABI, bindings, serialization, migrations, config defaults, CLI compatibility; external callers left un-updated.
 - **Build/packaging** — libs, platform slices, assets, plugins, manifests, release/debug divergence.
-- **Lifecycle/concurrency** — init/shutdown, pause/resume, cancellation, threading, ownership, cleanup, lock ordering, races.
+- **Lifecycle/concurrency** — init/shutdown, pause/resume, cancellation, threading, ownership, cleanup, lock ordering, races; event sources that go quiet while idle/static/paused, the wake-up path, and circular waits where progress requires an event the blocked side can no longer produce.
 - **Native/media safety** — memory safety, lifetimes, `unsafe`, error ownership; GPU/decoder/audio buffer lifetime and frame timing.
 - **Performance** (only per the gate above) — repeated copying/allocation, N+1 I/O, blocking in async or UI paths, contention, excess renders, unbounded queues, backpressure, startup/bundle/CPU/memory/battery regressions. No generic "could be faster".
 - **Data/input** — parsing, escaping, Unicode, paths, malformed or missing input, old saved state, precision/overflow.

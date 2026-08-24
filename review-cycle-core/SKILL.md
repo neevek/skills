@@ -7,39 +7,48 @@ description: Use when running review-plan-cycle or review-fix-cycle, or when eit
 
 The *loop* behind `review-plan-cycle` (subject = a plan) and `review-fix-cycle` (subject = a diff); those skills supply the subject and the checklists. Every pass uses **fresh-context, read-only** reviewers, so the session that produced the work never reviews its own reasoning.
 
-## Three standing limits (they override everything else)
+## Four standing limits (they override everything else)
 
-1. **Everything that can run at once, does.** A pass spawns *all* its reviewers in **one message, in parallel, backgrounded** — never one at a time, never one agent walking several scopes in sequence. Validation, measurements, and any confirming reviewer start in that same message; reviewers only read, so nothing races them. Reviewer wall time dominates the loop and is paid once per pass, not once per reviewer.
-2. **Related checks only.** Run the narrowest target covering the touched seams — never the whole suite "to be safe", and no reviewer may demand one. A full, device, simulator, browser, or e2e run happens only if the scope flags a cross-cutting change, and then once, at the end.
+1. **Everything that can run at once, does.** A pass spawns *all* its reviewers in **one message, in parallel, backgrounded** — never one at a time, never one agent walking several scopes in sequence. Any validation or measurement that will remain valid after likely findings, plus any confirming reviewer, starts in that same message. Defer checks the pass is likely to invalidate; parallel work that must be repeated is not an optimization.
+2. **Related checks only.** Run the narrowest target covering the touched seams — never the whole suite "to be safe", and no reviewer may demand one. A broad or full-suite device, simulator, browser, or e2e run happens only if the scope flags a cross-cutting change, and then once, at the end; a targeted journey is allowed whenever it is the narrowest faithful seam.
 3. **Stay on the work at hand** — the subject, against the intent the user stated. No adjacent bug hunts, no "while we're here" hardening, no new surfaces, no unrequested refactors. Worthwhile work outside the subject is *one line in the final output, routed to the user*.
+4. **Save work, never thinking time.** Speed comes from correct tiering, parallel independence, batching, and cache reuse — never reviewer deadlines. Do not set review timeouts, ask a reviewer to conclude early, or stop an in-scope read-only review because it is slow. Interrupt only when the user replaces the request, the reviewer is demonstrably out of scope, or the review cannot complete.
 
 This loop's failure mode is not missing bugs; it is spending the user's time and growing a small change into a large one.
 
-## Effort tier (choose once, before pass 1 — and say the price out loud)
+## Effort tier (choose once per stable authorized scope — and say the price out loud)
 
 Size from the *subject*, not from how important the work feels.
 
 | | **Lightweight** | **Standard** | **Full** |
 |---|---|---|---|
-| when | ≤ ~3 files / ~150 lines or plan steps, one risk class, no changed contract | neither column fits | changed public contract, wire/on-disk format, concurrency or lifecycle ownership, security, migration, or ≥ ~10 files |
+| when | ≤ ~3 production files / ~150 lines or plan steps, one risk class, no changed contract | neither column fits; includes internal concurrency/lifecycle changes contained in one component | public/wire/on-disk contract, security boundary, migration, ownership crossing components/processes, ≥3 named risk classes, or ≥10 production files |
 | reviewers/pass | **2** — the calling skill's two axes, concurrent | 2–3 — the axes plus the dominant risk class | one per disjoint scope, plus the second axis |
 | pass cap | **1** | 2 | 4 (8 only if the user asked for exhaustive) |
 | gate | items the subject touches | full, minus untouched stacks | full |
 | Design It Twice | no | load-bearing decisions only | available |
 
-**Lightweight is the default whenever the fixer could re-read the whole subject in one sitting.** Announce tier and price before spawning ("Lightweight: 2 reviewers, 1 pass, ~3 min") — a loop whose cost the user cannot see is one they cannot decline. On urgency, drop a tier, say so, and name what it skips. Extra reviewers are near-free in wall time; extra *passes* are not, so widen the fan-out before raising the cap.
+Count hand-authored production files and real contract surfaces; tests, generated output, and review-driven growth within the same authorized mechanisms do not raise the initial tier. The table's contract, security, migration, lifecycle/ownership-boundary, and risk-class criteria are floors: readability or urgency never lowers them. If the choice is between Standard and Full and no Full floor applies, choose Standard and widen the concurrent first pass around the dominant risk before buying more passes. Re-tier when an authorized expansion adds a floor-triggering contract, boundary, or risk class.
+
+**Lightweight is the default only when the Lightweight row permits it and the fixer could re-read the whole subject in one sitting.** Announce tier and price before spawning (for example, "Standard: Correctness + Spec + lifecycle, cap 2, focused unit validation") — price means reviewers, pass cap, and validation breadth, never an elapsed-time estimate. A lower tier that skips a floor requires the user's explicit acceptance of the omitted coverage. Extra concurrent reviewers are cheaper than extra passes, so widen the fan-out before raising the cap.
 
 **Escalate only for a High, or a Medium in a risk class the scope named.** Every other Medium is fixed, deferred, or recorded as residual risk within the cap: reviewers regenerate Mediums indefinitely, so treating each as an escalation makes a two-file change cost four passes.
 
 ## The loop
 
 1. **Scope** once (the calling skill's plan scope / change map).
-2. **Spawn the whole pass in one message** — every reviewer, plus validation and any measurement or confirmation not depending on their findings.
-3. **Wait by working, never by polling** — the harness notifies you. Don't idle, sleep, or re-spawn to check.
+2. **Spawn the whole pass in one message** — every reviewer, plus only validation and measurement that findings cannot make stale, and any confirmation not depending on their findings.
+3. **Wait by working, never by polling** — the harness notifies you. Don't idle, sleep, re-spawn to check, impose deadlines, or pressure reviewers to finish.
 4. **Triage** in the main session, **act** there too (reviewers never edit), **record** in the ledger.
 5. **Repeat only if the Stop rule says to**, scoping the next reviewers to *the delta plus the mechanism that changed*, carrying the ledger. Re-auditing settled hunks re-derives context you already paid for and duplicates findings.
 
 A pass is **atomic**: all reports in → triage all of it → act on every accepted finding → one ledger update → next pass. Never fix-one/review-one; it burns the cap one finding at a time and reads as oscillation. A report arriving as a single issue or a summary means the one-shot contract was missing from the prompt — fix the prompt, don't spend a pass rediscovering what was withheld.
+
+## User-visible checkpoints
+
+- Before pass 1: state the tier, reviewer scopes, pass cap, and validation breadth — no time estimate.
+- After each pass: report High/Medium keys by disposition, which validation remains green versus dirty, and the concrete reason another pass is necessary.
+- Before a meaningful scope expansion: name the newly required repository, service, public contract, platform, or deliverable and ask for direction unless the user already placed it in scope. Read-only boundary inspection is not expansion; mutation is.
 
 ## Spawning
 
@@ -47,6 +56,8 @@ A pass is **atomic**: all reports in → triage all of it → act on every accep
 - **Codex** — `explorer`s with `fork_context: false` and self-contained prompts, launched together; GPT reviewers follow tagged blocks (`<task>`, `<severity_rubric>`, `<ledger_factual>`, `<output_contract>`) far better than prose, and their *final message* is the whole deliverable. No subagent tool ⇒ concurrent read-only `codex exec` runs.
 - **Fresh means a separate agent.** The current session never reviews its own work, not even as a fallback; unavailable spawning is **blocked** (Stop rule).
 - **Model** — inherit the session's for judgement-heavy scopes (memory safety, concurrency, contracts, security); a cheaper, faster one suffices for mechanical scopes (comment discipline, test seams, packaging, glossary). Never trade strength on a named risk class.
+- **Completion** — a bounded prompt and one-shot report contract control scope, not duration. Let each reviewer finish naturally; do not add elapsed-time budgets or send "conclude now" follow-ups.
+- **Failure** — elapsed time alone never means a reviewer cannot complete. Treat it as blocked only when the tool reports failure/disconnection, required resources remain unavailable, or the user interrupts or replaces the work.
 
 ## One-shot report contract (inject verbatim, with the severity rubric)
 
