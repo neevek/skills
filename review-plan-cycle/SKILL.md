@@ -7,17 +7,13 @@ description: Iterative plan-review loop for Codex or Claude Code. Spawn fresh-co
 
 Plan-review passes over an implementation **plan** until findings fall below the stop threshold. Planning only — **no code edits, no refactors, no steps executed**; the output is an execution-ready plan with its technical and design concerns surfaced early. Sibling `review-fix-cycle` does this for code diffs.
 
-**REQUIRED SUB-SKILL:** load `review-cycle-core` for the loop — effort tiers, parallel spawning, the one-shot report contract, triage, the ledger, the anti-oscillation protocol, the stop rule, comment and ADR/glossary discipline. This skill adds only the plan specifics.
+**REQUIRED SUB-SKILL:** load `review-cycle-core` and run its Run sheet. It owns the loop — effort tiers, the four standing limits, parallel spawning, the one-shot report contract, triage, the ledger, anti-oscillation, the stop rule, the simplicity bar and design vocabulary, and comment/ADR/glossary discipline. This skill adds only the plan specifics.
 
-**The core's three standing limits bind here:**
-
-- **Spawn a pass's reviewers together** — one message, one per relevant risk class, backgrounded. A plan is cheap to read, so breadth costs a pass no extra wall time; sequencing reviewers does.
-- **The plan specifies related-test selection, not "run the suite"** — its Validation strategy names, per step, the narrowest command covering that step's seams, and reserves any full-suite, device, simulator, or e2e run for a single final check, only where something cross-cutting justifies it. "Run all tests" hands the implementer the loop's most expensive habit.
-- **Stay on the plan at hand** — harden the plan the user asked for, don't grow its objective. A reviewer proposing extra phases, abstractions, or adjacent work the intent never named is a `scope note` routed to the user, never a silent new step; a plan that gains scope during review is a plan the user must re-approve.
+**How the limits read for a plan:** a plan is cheap to read, so spawn every risk class at once — breadth costs a pass no wall time, sequencing does. And a plan that gains scope during review is a plan the user must re-approve: extra phases, abstractions, or adjacent work the intent never named are a `scope note` routed to the user, never a silent new step.
 
 ## Plan scope (core step 1)
 
-A few lines before pass 1:
+A few lines before pass 1, injected into every reviewer prompt:
 
 - intent / acceptance criteria (what "done" means).
 - the plan under review (link or inline, in the Plan format below).
@@ -56,13 +52,9 @@ Refine the plan from accepted findings — main session only — recording `key 
 
 Then run the Execution-readiness gate before declaring the loop done.
 
-## Design vocabulary (use these terms exactly, so complexity findings are reproducible rather than taste)
+## Simplicity on a plan
 
-- **Deep vs shallow module** — deep = small interface, much behavior behind it; shallow = interface nearly as complex as the implementation (a pass-through). Prefer deep.
-- **Interface** — everything a caller must know to use a module correctly: signature *plus* invariants, ordering, error modes, required config, performance characteristics. **Seam** — where that interface lives (its own decision). **Adapter** — a concrete thing satisfying an interface at a seam.
-- **Leverage** — behavior gained per unit of interface learned. **Locality** — change, bugs, knowledge, and verification concentrating in one place.
-- **Deletion test** — imagine deleting the module: complexity vanishing means it was a pass-through; complexity reappearing across N callers means it earned its keep.
-- **One adapter is a hypothetical seam; two is a real one** — don't plan a seam unless something actually varies across it.
+Core owns the bar and the vocabulary. On a plan it lands as: a step introducing a seam nothing yet varies across; a module the **deletion test** says is a pass-through; an interface whose invariants and error modes the plan never states; a phase that exists only to enable a later phase nobody asked for. **Simpler plan** is the default counter-proposal; **Design It Twice** is for the case below.
 
 ## Design It Twice (only for an accepted High about module/interface/seam shape)
 
@@ -74,7 +66,7 @@ Don't settle it by guessing — explore in parallel, in one message:
 
 ## Implementation conventions the plan must carry
 
-The implementer will not infer conventions — state them once in the plan's **Implementation conventions** field, including the core's **Comment discipline** verbatim in substance (default no comments; only a fact the code cannot show; ~1–2 lines; decided on the first write). The plan must not prescribe explanatory comments in place of a clear design: a step only understandable with a comment is a step to simplify.
+The implementer will not infer conventions — state them once in the plan's **Implementation conventions** field, carrying core's **Comment discipline** verbatim in substance (default no comments; only a fact the code cannot show; ~1–2 lines; decided on the first write). A step that is only understandable with a comment is a step to simplify.
 
 ## Execution-readiness gate
 
@@ -94,7 +86,7 @@ A gap means the plan is not execution-ready regardless of finding count: close i
 
 ## Reviewer prompts
 
-Specialize with the plan scope and the reviewer's risk class; inject the severity rubric and one-shot contract.
+Specialize with the plan scope and the reviewer's risk class; inject the severity rubric, one-shot contract, design vocabulary, and factual ledger. Paste the plan in — never make a reviewer go find it.
 
 **Risk:**
 
@@ -104,7 +96,7 @@ Judge the plan against the objective it states — not against a larger plan you
 
 Report findings per the injected contract, each referencing the plan step or section, covering your assigned risk class and nothing else.
 
-Judge design with the Design vocabulary: prefer **deep** modules; flag **shallow** ones (apply the **deletion test**), leaky seams, and **speculative** seams (one adapter is hypothetical, two is real).
+Judge design with the injected design vocabulary: prefer **deep** modules; flag **shallow** ones (apply the **deletion test**), leaky seams, and **speculative** seams (one adapter is hypothetical, two is real). Simpler is better only while the plan stays correct and efficient — never propose dropping a case, a bound, or a guard to shrink a step.
 
 Verify claimed existing behavior against the scoped code or docs: if the plan says a command, API, or state machine already behaves a certain way, cite where that is true or flag the claim as unverified.
 
@@ -114,7 +106,7 @@ Think adversarially about the failure timelines your class covers: stale async c
 
 ## Plan format
 
-Objective · Acceptance criteria · Assumptions · Ordered steps · File/module targets · Contracts/migrations touched · Risk classes · Implementation conventions · Validation strategy (narrowest command per step) · Rollout / rollback · Risks · Design concerns (in Design vocabulary terms) · Open questions
+Objective · Acceptance criteria · Assumptions · Ordered steps · File/module targets · Contracts/migrations touched · Risk classes · Implementation conventions · Validation strategy (narrowest command per step) · Rollout / rollback · Risks · Design concerns (in the design vocabulary's terms) · Open questions
 
 ## Final output (core skeleton, plus)
 

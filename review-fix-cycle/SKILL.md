@@ -1,22 +1,20 @@
 ---
 name: review-fix-cycle
-description: Iterative review-fix loop. Spawn fresh-context read-only reviewers in parallel, triage findings, fix only in the main session, validate with related tests only, and repeat until findings drop below a severity threshold or a pass cap is hit. Use this when you want convergence over multiple passes, not a one-shot review — checking code correctness, evidence-backed performance risks, and spec compliance (missing or partial requirements, scope creep). Works across native (C/C++/Rust), UI/web (TS/JS), and mobile/desktop (Swift/Kotlin/Java) projects.
+description: Iterative review-fix loop. Spawn fresh-context read-only reviewers in parallel, triage findings, fix only in the main session, validate with related tests only, and repeat until findings drop below a severity threshold or a pass cap is hit. Use this when you want convergence over multiple passes, not a one-shot review — checking code correctness, evidence-backed performance risks, simplicity, and spec compliance (missing or partial requirements, scope creep). Works across native (C/C++/Rust), UI/web (TS/JS), and mobile/desktop (Swift/Kotlin/Java) projects.
 ---
 
 # review-fix-cycle
 
 Review-fix passes over a code **diff** until findings fall below the stop threshold. Sibling `review-plan-cycle` does this for a plan before any code exists.
 
-**REQUIRED SUB-SKILL:** load `review-cycle-core` for the loop — effort tiers, parallel spawning, the one-shot report contract, triage, the ledger, the anti-oscillation protocol, the stop rule, comment and ADR/glossary discipline. This skill adds only the diff specifics.
-
-**The core's four standing limits bind here:** spawn both axes (at Full, every scope) concurrently in one message alongside only validation that will remain valid; validate with the narrowest targets covering the touched seams; review *this diff* against the stated intent and nothing wider — a finding that would grow it goes to the user, not into the code; optimize duplicate work, never reviewer thinking time.
+**REQUIRED SUB-SKILL:** load `review-cycle-core` and run its Run sheet. It owns the loop — effort tiers, the four standing limits, parallel spawning, the one-shot report contract, triage, the ledger, anti-oscillation, the stop rule, the simplicity bar, and comment/ADR/glossary discipline. This skill adds only the diff specifics: what to map, what to check, what to run, and when the fix is done.
 
 ## Change map (core step 1)
 
-A few lines before pass 1. Write **"n/a"** rather than inventing content: an imagined hot path or contract sends a reviewer hunting something that isn't there, and you pay for the hunt.
+A few lines before pass 1, injected into every reviewer prompt. Write **"n/a"** rather than inventing content: an imagined hot path or contract sends a reviewer hunting something that isn't there, and you pay for the hunt.
 
 - intent / acceptance goals.
-- diff-scope command — `git show HEAD` (or `<ref>`), `git diff --merge-base origin/main`, `git diff` / `--staged`. Exclude generated and vendored files; review the source that produces them.
+- diff-scope command — `git show HEAD` (or `<ref>`), `git diff --merge-base origin/main`, `git diff` / `--staged`. Exclude generated and vendored files; review the source that produces them. Paste the diff itself into the prompts when it fits; otherwise every reviewer re-runs the same discovery.
 - changed contracts — boundaries outside the diff that depend on it, so a break is silent: exported APIs, RPC/API shapes, UI props/events/tokens, cross-language or cross-process seams, wire/on-disk formats, persisted or cached state, config/flags, packaged or generated output.
 - **boundary behavior** when the change is event-driven, asynchronous, cached, streamed, or cross-component — identify the actual producer and consumer; what happens while idle/quiescent, empty, paused, disconnected, or backpressured; what wakes or retries the path; and which event proves completion. Read only the directly involved boundary code before pass 1 instead of paying later passes to discover its contract.
 - **validation targets** — the narrowest command per touched stack, named here so no pass has to guess. Say whether anything is cross-cutting enough to justify one broad run at the end; default is no.
@@ -25,7 +23,7 @@ A few lines before pass 1. Write **"n/a"** rather than inventing content: an ima
 
 ## Scope-expansion gate
 
-Inspect direct dependencies and adjacent repositories read-only when needed to map a changed boundary. If an accepted fix would require mutating a repository, service, public API, generated artifact pipeline, platform, or deliverable the user did not already place in scope, stop before editing it: report the dependency, why the in-scope change cannot satisfy the acceptance goal alone, and the smallest expansion needed. After authorization, re-tier whenever the expansion adds a core floor-triggering contract, boundary, or risk class; never let review silently broaden the assignment.
+Inspect direct dependencies and adjacent repositories read-only when needed to map a changed boundary. If an accepted fix would require mutating a repository, service, public API, generated artifact pipeline, platform, or deliverable the user did not already place in scope, stop before editing it: report the dependency, why the in-scope change cannot satisfy the acceptance goal alone, and the smallest expansion needed. After authorization, re-tier whenever the expansion adds a core floor. Never let review silently broaden the assignment.
 
 ## Two axes per pass, always concurrent
 
@@ -38,7 +36,7 @@ At Full, fan out Correctness by scope in the same message — native (memory, ow
 
 ## Triage states
 
-**accept / reject / needs-verification**, recording why rejected — reviewers guess wrong on `unsafe`, lifetimes, FFI, threading, and on whether a Spec "miss" was deliberately out of scope. The core's confirming-reviewer and anti-oscillation rules apply; two reviewers pulling the same lines in opposite directions is a frozen trade-off for the user, not a third fix.
+**accept / reject / needs-verification**, recording why rejected — reviewers guess wrong on `unsafe`, lifetimes, FFI, threading, and on whether a Spec "miss" was deliberately out of scope. Core's confirming-reviewer and anti-oscillation rules apply; two reviewers pulling the same lines in opposite directions is a frozen trade-off for the user, not a third fix.
 
 ## Fixing a correctness finding (red-capable)
 
@@ -47,6 +45,12 @@ A finding asserting **wrong behavior** needs a check that goes red on that sympt
 **Cheapest red check on a fix already written: invert the fix, not the bug.** Disable the new mechanism in place (`if false, …`, revert the default, comment the guard), watch the new test fail, restore, watch it pass — one build, no harness, and it proves the test binds to *this* mechanism. Never leave the inverted state behind.
 
 When several accepted findings share a build target, batch independent regression checks: add all tests, invert each new mechanism in one temporary patch, run the individually named tests together so every expected failure stays attributable, restore the mechanisms together, then compile and run green once. Split the batch only when inversions interact or obscure which contract failed.
+
+## Simplicity (core's simplicity bar, applied to a diff)
+
+Core owns the bar and the vocabulary. On a diff it lands as: a branch or state field no path can reach; a wrapper that only forwards (**deletion test**); a seam with one adapter; a flag threaded through callers to reach one decision; a special case the general path already handles. "Add a comment here" almost always means "simplify this" — do that and reject the comment.
+
+Every complexity finding carries its **minimal fix**; a **structural refactor** only when the minimal fix leaves the shape wrong, with its trade-offs, since restructuring is scope growth the user owns (core limit 3).
 
 ## Performance (conditional, evidence-gated)
 
@@ -63,22 +67,27 @@ Measure before optimizing: release-equivalent build, same workload, config, and 
 **Related tests only — run the cheapest thing that can fail.** Deriving targets from the change map is part of the job; "run the suite" is the loop's most expensive habit and it re-validates code the next pass will change.
 
 - Narrow to the touched seams: `-only-testing:` / `--filter` / `-run` / one package or target. Can't name a narrow target ⇒ say so and pick the smallest package containing the seam; never fall back to everything.
-- Split build from run (`build-for-testing` + `test-without-building`, `cargo test --no-run`) and reuse that build for the whole pass.
-- Keep a validation ledger: target → relevant source/dependency paths + build/runtime inputs + external-state assumptions → last green revision/state → clean/dirty. Reuse a green result only while every declared input and relevant external state remains unchanged; configuration, generated artifacts, schemas, services, devices, browsers, simulators, toolchains, and environment can dirty a target without a source edit.
-- Apply every accepted production fix and test edit for the pass before compiling. Build each dirty target once after the batch, then reuse it for every related run.
+- **Keep a validation ledger** — target → relevant source/dependency paths + build/runtime inputs + external-state assumptions → last green revision/state → clean/dirty. A target whose declared inputs and relevant external state are all unchanged since green is not re-run; anything else is dirty. Configuration, generated artifacts, schemas, services, devices, browsers, simulators, toolchains, and environment dirty a target without a source edit.
+- **Batch, then build once.** Apply every accepted production fix and test edit for the pass before compiling; split build from run (`build-for-testing` + `test-without-building`, `cargo test --no-run`) and reuse that build for every run in the pass. Never rebuild under a running test process.
 - Order by cost, stop at the first red: typecheck/compile → lint → unit → integration → UI/simulator/e2e.
-- Start only stable validation in the pass's spawn message. A target covering code reviewers are likely to change waits until triage and the batched fix; an unchanged dependency check or baseline measurement may run concurrently.
-- Defer expensive integration, device, simulator, browser, and UI journeys until no accepted cheaper-seam finding remains. Run one earlier only when it is itself the narrowest red/green seam for an accepted finding.
-- A broad, device, simulator, browser, or e2e run happens **only** if the change map flagged something cross-cutting — then once, in the final pass, plus any target whose code changed since it last passed.
-- Never rebuild under a running test process, and never re-run a target whose declared build inputs, runtime inputs, dependencies, and relevant external state are all unchanged since it was green.
+- Only *stable* validation joins the pass's spawn message (core limit 1). A target covering code the reviewers are likely to change waits for triage and the batched fix; an unchanged dependency check or a baseline measurement runs concurrently.
+- Defer expensive integration, device, simulator, browser, and UI journeys until no accepted cheaper-seam finding remains — run one earlier only when it is itself the narrowest red/green seam for an accepted finding. A broad or device/simulator/browser/e2e run happens only per core limit 2: change map flagged something cross-cutting, once, in the final pass, plus any target whose code changed since it last passed.
 
 Per stack: **Rust** — `cargo build`, `cargo test`, `cargo clippy -- -D warnings`, plus `extern "C"`/`#[no_mangle]` symbols and regenerated headers matching callers. **C/C++** — build + tests, exported symbols (`nm`), ABI drift (`abidiff`), release/debug parity. **TS/JS** — `tsc --noEmit`, lint, unit, build for changed deployables. **Swift/Kotlin/Java** — platform build + tests, regenerated bindings, packaged native libs, manifests, permissions. **Cross-cutting** — exported symbols, generated files, schema migrations, snapshot output.
 
 ## Fix-readiness gate
 
-**At Lightweight, four items and nothing else:** every accepted finding fixed; one red-to-green check on the correctness behavior the loop was called about, or the Performance section's representative before/after evidence for an accepted performance finding; the scoped validation target run; ledger recorded. The performance evidence gate applies at every tier.
+For **every accepted finding**, before declaring the loop done:
 
-At Standard and Full, for **every accepted finding**: a fix applied in the main session; for a non-performance correctness finding, a regression test at a correct seam, passing now and red before — or the absence of a correct seam recorded as residual risk (a too-shallow seam is false confidence, so say so instead of claiming coverage); for a performance finding, before/after measurements, a red-to-green budget check if a contract was breached, and a guard only where stable; scoped validation run for the touched stacks with output captured; a ledger entry reading `key → finding → accept/reject (why) → fix → validation → residual risk`. A gap means the loop is not done regardless of finding count: close it within the cap, else stop as **not converged**, naming the gap.
+- the fix applied in the main session;
+- for a non-performance correctness finding, a regression test at a correct seam, passing now and red before — or the absence of a correct seam recorded as residual risk (a too-shallow seam is false confidence, so say so instead of claiming coverage);
+- for a performance finding, before/after measurements, a red-to-green budget check if a contract was breached, and a guard only where stable;
+- the scoped validation targets for the touched stacks run, with output captured;
+- a ledger entry reading `key → finding → accept/reject (why) → fix → validation → residual risk`.
+
+**At Lightweight the gate is four items and nothing else:** every accepted finding fixed; one red-to-green check on the correctness behavior the loop was called about, or the Performance section's before/after evidence when the accepted finding is a performance one; the scoped validation target run; ledger recorded. The performance-evidence item applies at every tier.
+
+A gap means the loop is not done regardless of finding count: close it within the cap, else stop as **not converged**, naming the gap.
 
 ## Review checklist (inject into the Correctness prompt; only areas the diff touches)
 
@@ -92,16 +101,16 @@ At Standard and Full, for **every accepted finding**: a fix applied in the main 
 - **Security/privacy** — auth, secrets, certs, permissions, sandboxing, untrusted input, dependency loading.
 - **UI** — navigation, state persistence, disabled/loading/error states, accessibility, responsive layout, overflow, stale controls.
 - **Tests** — missing coverage for changed contracts, edge cases, target platforms; a proposed test must name the narrowest target that runs it.
-- **Simplicity** — over-complex logic, needless abstraction, avoidable branching or state.
+- **Simplicity** — per the Simplicity section: unreachable branches or state, forwarding wrappers, single-adapter seams, flags threaded to one decision, special cases the general path covers. Minimal fix first.
 - **Comments** — narration, restating the change, or referencing this review (Low; prefer deleting the comment or simplifying the code).
 
 ## Reviewer prompts
 
-Specialize with the change map, diff-scope command, and scope; inject the checklist, severity rubric, and one-shot contract.
+Specialize with the change map and scope; inject the checklist, severity rubric, one-shot contract, and the factual ledger. Paste the diff when it fits, so no reviewer spends its pass rediscovering it.
 
-**Correctness:** "Read-only review — do not edit files. Run `<diff-scope command>` to read the change; you may read the rest of the tree to see how changed contracts are used, but run no build, test, lint, benchmark, or profiler commands — measurement belongs to the main session. Judge the change against the stated intent and changed contracts, using the project's glossary terms exactly and respecting ADRs in the touched area (to reopen one, say so and why). Audit only the areas the diff touches, per the injected checklist; skip what the formatter or linter handles; mark anything you are unsure of `needs-verification`. Two things are out of bounds: restating what the change does, and reporting behavior the stated intent never asked for — judge the diff against that intent, not against the feature you would have built. If you believe the intent is too narrow, say so in one line labelled `scope note`, which routes to the user, who owns scope. Any check you ask for must name the narrowest target that would run it; never ask for the full suite. For a performance finding, give mechanism, hotness evidence, expected metric, and verification method. For a complexity finding, optionally give a **minimal fix**, and a **structural refactor** only if warranted, with its trade-offs."
+**Correctness:** "Read-only review — do not edit files. The change is below (or run `<diff-scope command>` to read it); you may read the rest of the tree to see how changed contracts are used, but run no build, test, lint, benchmark, or profiler commands — measurement belongs to the main session. Judge the change against the stated intent and changed contracts, using the project's glossary terms exactly and respecting ADRs in the touched area (to reopen one, say so and why). Audit only the areas the diff touches, per the injected checklist; skip what the formatter or linter handles; mark anything you are unsure of `needs-verification`. Two things are out of bounds: restating what the change does, and reporting behavior the stated intent never asked for — judge the diff against that intent, not against the feature you would have built. If you believe the intent is too narrow, say so in one line labelled `scope note`, which routes to the user, who owns scope. Any check you ask for must name the narrowest target that would run it; never ask for the full suite. For a performance finding, give mechanism, hotness evidence, expected metric, and verification method. For a complexity finding, give the **minimal fix**, and a **structural refactor** only if the minimal fix leaves the shape wrong, with its trade-offs — never propose one that changes behavior on any path or slows a hot path."
 
-**Spec:** "Read-only spec review — do not edit files. Run `<diff-scope command>`, and read the spec at `<path or contents>` (absent one, the stated intent/acceptance goals). Report **every** spec-conformance finding and only those: **(a)** requirements missing or partial; **(b)** behavior the spec never asked for (scope creep); **(c)** requirements implemented wrongly. Quote the spec or intent line for each, with file + line where relevant, using glossary terms exactly. No code-quality findings — that is the other axis. Neither spec nor intent given ⇒ reply 'no spec available'. Run no builds or tests."
+**Spec:** "Read-only spec review — do not edit files. Read the change (below, or via `<diff-scope command>`) and the spec at `<path or contents>` (absent one, the stated intent/acceptance goals). Report **every** spec-conformance finding and only those: **(a)** requirements missing or partial; **(b)** behavior the spec never asked for (scope creep); **(c)** requirements implemented wrongly. Quote the spec or intent line for each, with file + line where relevant, using glossary terms exactly. No code-quality findings — that is the other axis. Neither spec nor intent given ⇒ reply 'no spec available'. Run no builds or tests."
 
 ## Final output (core skeleton, plus)
 
@@ -109,4 +118,4 @@ Specialize with the change map, diff-scope command, and scope; inject the checkl
 - Validation commands run, scoped targets and results; fix-readiness gate result.
 - Performance dispositions with before/after and confidence — or "not performance-sensitive".
 - Spec axis: missing or partial requirements, scope creep, wrong implementations — or "no spec available".
-- Simplicity changes made, or why none; minimal versus structural where complexity findings existed.
+- Simplicity: what was simplified, or why nothing was; minimal versus structural where complexity findings existed.
