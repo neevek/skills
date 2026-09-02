@@ -107,9 +107,9 @@ Any trigger here ends the loop *immediately* rather than at the cap, and the exi
 
 Read the standing-instructions files (`CLAUDE.md` / `AGENTS.md`, `CONTEXT.md`) before pass 1 and fold into every reviewer prompt: **(a)** decisions the project has settled — honor them like ADRs, and don't raise concerns they rule out (lockstep co-deployed repos make backward-compat and migration concerns non-issues); **(b)** the failure classes it documents — make pass 1 adversarial on those. Use the glossary's terms (`CONTEXT.md` / `UBIQUITOUS_LANGUAGE.md`) exactly. Don't re-litigate an ADR in the touched area; a reviewer wanting one reopened must say so and why. Offer a new ADR when a pass settles a load-bearing, hard-to-reverse trade-off.
 
-## Simplicity bar and design vocabulary (both skills judge against this)
+## Simplicity bar and design vocabulary (both skills judge and author against this)
 
-**Simple and easy to reason about — but correct and efficient first.** Simplicity is not fewer characters and never a licence to drop a case, a bound, or a guard; it is *less for the next reader to hold in their head*. Take the earliest remedy that works: delete the code → fold it into its one caller → clearer name or smaller function → *then* a new abstraction. A layer added to hide complexity usually just moves it, and a reviewer asking for a comment is usually asking for a simpler shape.
+**Simple and easy to reason about — but correct and efficient first.** Simplicity is not fewer characters and never a licence to drop a case, a bound, or a guard; it is *less for the next reader to hold in their head*. Take the earliest remedy that works: delete the code → fold it into its one caller → clearer name or smaller function → *then* a new abstraction. A layer added to hide complexity usually just moves it, and a reviewer asking for a comment is usually asking for a simpler shape. The bar binds authoring too, not just judging: apply an accepted finding as the smallest edit that resolves it on every path it affects — no branch, field, flag, or wrapper the finding doesn't require.
 
 Judge with these terms, so complexity findings are reproducible rather than taste:
 

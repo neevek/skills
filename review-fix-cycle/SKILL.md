@@ -40,7 +40,7 @@ At Full, fan out Correctness by scope in the same message — native (memory, ow
 
 ## Fixing a correctness finding (red-capable)
 
-A finding asserting **wrong behavior** needs a check that goes red on that symptom and green once fixed — a test at the right seam, a curl script, a CLI run diffed against known-good — **red first**: a fix you can't watch turn red-to-green is unverified, and may be fixing something nearby. Style, contract, and packaging findings need only the Validation commands.
+A finding asserting **wrong behavior** needs a check that goes red on that symptom and green once fixed — a test at the right seam, a curl script, a CLI run diffed against known-good — **red first**: a fix you can't watch turn red-to-green is unverified, and may be fixing something nearby. The red check is evidence the fix landed, never the target: fix the mechanism on every affected path, not just the case the check exercises. Style, contract, and packaging findings need only the Validation commands.
 
 **Cheapest red check on a fix already written: invert the fix, not the bug.** Disable the new mechanism in place (`if false, …`, revert the default, comment the guard), watch the new test fail, restore, watch it pass — one build, no harness, and it proves the test binds to *this* mechanism. Never leave the inverted state behind.
 
@@ -81,12 +81,13 @@ Per stack: **Rust** — `cargo build`, `cargo test`, `cargo clippy -- -D warning
 For **every accepted finding**, before declaring the loop done:
 
 - the fix applied in the main session;
+- the final pass's fixes re-read once against the Simplicity section's diff shapes — they are the one set of edits no reviewer sees;
 - for a non-performance correctness finding, a regression test at a correct seam, passing now and red before — or the absence of a correct seam recorded as residual risk (a too-shallow seam is false confidence, so say so instead of claiming coverage);
 - for a performance finding, before/after measurements, a red-to-green budget check if a contract was breached, and a guard only where stable;
 - the scoped validation targets for the touched stacks run, with output captured;
 - a ledger entry reading `key → finding → accept/reject (why) → fix → validation → residual risk`.
 
-**At Lightweight the gate is four items and nothing else:** every accepted finding fixed; one red-to-green check per accepted wrong-behavior finding (the Performance section's before/after evidence when it is a performance one); the scoped validation target run; ledger recorded — the first two vanish when nothing was accepted. The performance-evidence item applies at every tier.
+**At Lightweight the gate is five items and nothing else:** every accepted finding fixed; the fixes re-read once against the Simplicity section's diff shapes; one red-to-green check per accepted wrong-behavior finding (the Performance section's before/after evidence when it is a performance one); the scoped validation target run; ledger recorded — the first three vanish when nothing was accepted. The performance-evidence item applies at every tier.
 
 A gap means the loop is not done regardless of finding count: close it within the cap, else stop as **not converged**, naming the gap.
 
