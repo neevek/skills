@@ -40,7 +40,7 @@ Every pass spawns at least two reviewers in one message, and their reports stay 
 
 ## Triage states
 
-**accept / reject / defer**, recording why. *Reject* taste disagreements you have considered and settled — a reviewer's architectural preference is not automatically correct. *Defer* what is genuinely an implementation-time decision rather than a plan blocker. `needs-discussion` is not a fourth state: a technical doubt gets at most one more read-only reviewer, launched with the next pass; a product or scope call only the user can make means **stop and ask the user**. Two reviewers pushing a step in opposite directions is a frozen trade-off for the user (core: no reversals), not a third rewrite.
+**accept / reject / defer**, recording why. *Reject* taste disagreements you have considered and settled — a reviewer's architectural preference is not automatically correct. *Defer* what is genuinely an implementation-time decision rather than a plan blocker. A reviewer's `needs-verification` is not a fourth state: a technical doubt gets at most one more read-only reviewer, launched with the next pass; a product or scope call only the user can make means **stop and ask the user**. Two reviewers pushing a step in opposite directions is a frozen trade-off for the user (core: no reversals), not a third rewrite.
 
 ## Refine & record
 
@@ -60,7 +60,7 @@ Core owns the bar and the vocabulary. On a plan it lands as: a step introducing 
 
 Don't settle it by guessing — explore in parallel, in one message:
 
-1. Spawn **3+ fresh read-only sub-agents concurrently**, each designing the interface a *radically different* way: minimal interface (1–3 entry points, max leverage); maximum flexibility; optimized for the commonest caller; ports & adapters around a cross-seam dependency.
+1. Spawn **three fresh read-only sub-agents concurrently** (a fourth only for a genuinely distinct axis), each designing the interface a *radically different* way, drawn from: minimal interface (1–3 entry points, max leverage); maximum flexibility; optimized for the commonest caller; ports & adapters around a cross-seam dependency.
 2. Each returns the interface (types, methods, params, invariants, ordering, error modes), a usage example, what stays hidden behind the seam, the dependency/adapter strategy, and trade-offs.
 3. Compare on **depth**, **locality**, and **seam placement**; fold the winner in, graft the best of the runners-up, record the choice with its rationale. Be opinionated — the choice is settled once and a later pass does not reopen it (core: two strikes).
 
@@ -100,7 +100,7 @@ Judge design with the injected design vocabulary: prefer **deep** modules; flag 
 
 Verify claimed existing behavior against the scoped code or docs: if the plan says a command, API, or state machine already behaves a certain way, cite where that is true or flag the claim as unverified.
 
-Think adversarially about the failure timelines your class covers: stale async completion after reconnect or invalidation, cancellation after a partial side effect, task drop or leak, queue growth, cache staleness, retry storm, version compatibility, rollback after partial rollout, permission bypass, degraded dependencies, observability blind spots. Flag any vague or unverifiable step, missing lifecycle/timeout/retry/backpressure semantics, unclear state-mutation authority, and any contract, migration, rollback, or test-harness gap. Mark anything you are unsure of `needs-discussion`. If the plan is over-complex, offer a **Simpler plan**; for a High about module/interface/seam shape, recommend **Design It Twice** rather than guessing one redesign."
+Think adversarially about the failure timelines your class covers: stale async completion after reconnect or invalidation, cancellation after a partial side effect, task drop or leak, queue growth, cache staleness, retry storm, version compatibility, rollback after partial rollout, permission bypass, degraded dependencies, observability blind spots. Flag any vague or unverifiable step, missing lifecycle/timeout/retry/backpressure semantics, unclear state-mutation authority, and any contract, migration, rollback, or test-harness gap. Mark anything you are unsure of `needs-verification`. If the plan is over-complex, offer a **Simpler plan**; for a High about module/interface/seam shape, recommend **Design It Twice** rather than guessing one redesign."
 
 **Objective:** "Read-only plan review — do not edit files. Read the plan and the stated intent/acceptance criteria at `<path or contents>`. Report **only** objective-conformance findings: **(a)** an acceptance criterion no step delivers, or delivers partially; **(b)** a step the objective never asked for (scope creep); **(c)** a step that would deliver a requirement wrongly; **(d)** an acceptance criterion stated so it cannot be tested. Quote the intent line for each and reference the plan step, using glossary terms exactly. No design or risk findings — that is the other axis. Run no builds or tests."
 

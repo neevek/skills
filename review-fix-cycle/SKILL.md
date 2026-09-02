@@ -18,7 +18,7 @@ A few lines before pass 1, injected into every reviewer prompt. Write **"n/a"** 
 - changed contracts — boundaries outside the diff that depend on it, so a break is silent: exported APIs, RPC/API shapes, UI props/events/tokens, cross-language or cross-process seams, wire/on-disk formats, persisted or cached state, config/flags, packaged or generated output.
 - **boundary behavior** when the change is event-driven, asynchronous, cached, streamed, or cross-component — identify the actual producer and consumer; what happens while idle/quiescent, empty, paused, disconnected, or backpressured; what wakes or retries the path; and which event proves completion. Read only the directly involved boundary code before pass 1 instead of paying later passes to discover its contract.
 - **validation targets** — the narrowest command per touched stack, named here so no pass has to guess. Say whether anything is cross-cutting enough to justify one broad run at the end; default is no.
-- performance context **when touched** — hot path or scaling boundary, representative workload, metric or budget, known baseline, reproducible measurement command. No budget or baseline ⇒ say so, don't invent one.
+- performance context **when touched** — hot path or scaling boundary, representative workload, metric or budget, known baseline, reproducible measurement command. No budget or baseline ⇒ say so, don't invent one. An added or changed inner loop, or changed code on a per-frame, per-request, per-item, or startup path, counts as touched even with no stated budget; write "n/a" only when no changed code sits on such a path.
 - spec source — the issue/PRD the diff implements; absent one, the Spec axis runs against the intent above. Skip that axis only when neither exists.
 
 ## Scope-expansion gate
@@ -58,7 +58,7 @@ Every complexity finding carries its **minimal fix**; a **structural refactor** 
 
 A static reviewer may raise a *risk*, and may call it a regression only when the change map supplies applicable measurements. Every performance finding states **mechanism** (added work, waiting, contention, copying, I/O, rendering, worse scaling), **hotness** (call site, frequency, input-size relation, real-time path, or budget making it material), **metric** (p95 latency, frame time, allocations/frame, peak RSS, wakeups, bundle bytes), and **verification** (the benchmark or profile comparison that would settle it). Plausible mechanism with unknown hotness ⇒ `needs-verification`; a cold-path micro-optimization ⇒ omit. Severity: **High** only for a demonstrated budget/SLO breach, missed deadline, hang, or OOM; **Medium** for a credible material regression or unbounded scaling on a hot path; **Low** for a measured minor one.
 
-`needs-verification` is not terminal at/above threshold: run the measurement during this pass — start it in the spawn message when it doesn't depend on the reports — and convert it to accept or reject. If no representative measurement can be built, stop as **verification blocked**, naming the missing workload or tool.
+`needs-verification` is not terminal at/above threshold: run the measurement during this pass — the baseline can start with the spawn message when the change map names the path; the comparison runs after the batched fix — and convert it to accept or reject. If no representative measurement can be built, stop as **verification blocked**, naming the missing workload or tool.
 
 Measure before optimizing: release-equivalent build, same workload, config, and machine on both sides; warm up, take enough samples to expose noise, report median plus p95/p99, never one wall-clock run; compare against baseline or budget, making a breached budget red-to-green. Add a guard only where it can be stable — otherwise record the command and the residual risk. Performance stays in the Correctness ledger; it is never a third axis.
 
@@ -70,6 +70,7 @@ Measure before optimizing: release-equivalent build, same workload, config, and 
 - **Keep a validation ledger** — target → relevant source/dependency paths + build/runtime inputs + external-state assumptions → last green revision/state → clean/dirty. A target whose declared inputs and relevant external state are all unchanged since green is not re-run; anything else is dirty. Configuration, generated artifacts, schemas, services, devices, browsers, simulators, toolchains, and environment dirty a target without a source edit.
 - **Batch, then build once.** Apply every accepted production fix and test edit for the pass before compiling; split build from run (`build-for-testing` + `test-without-building`, `cargo test --no-run`) and reuse that build for every run in the pass. Never rebuild under a running test process.
 - Order by cost, stop at the first red: typecheck/compile → lint → unit → integration → UI/simulator/e2e.
+- A red also present on the base revision, or non-deterministic across two runs with no edit between, is not this diff's failure: record it as residual environment risk and move on — never fix out-of-scope code to green it.
 - Only *stable* validation joins the pass's spawn message (core limit 1). A target covering code the reviewers are likely to change waits for triage and the batched fix; an unchanged dependency check or a baseline measurement runs concurrently.
 - Defer expensive integration, device, simulator, browser, and UI journeys until no accepted cheaper-seam finding remains — run one earlier only when it is itself the narrowest red/green seam for an accepted finding. A broad or device/simulator/browser/e2e run happens only per core limit 2: change map flagged something cross-cutting, once, in the final pass, plus any target whose code changed since it last passed.
 
@@ -85,7 +86,7 @@ For **every accepted finding**, before declaring the loop done:
 - the scoped validation targets for the touched stacks run, with output captured;
 - a ledger entry reading `key → finding → accept/reject (why) → fix → validation → residual risk`.
 
-**At Lightweight the gate is four items and nothing else:** every accepted finding fixed; one red-to-green check on the correctness behavior the loop was called about, or the Performance section's before/after evidence when the accepted finding is a performance one; the scoped validation target run; ledger recorded. The performance-evidence item applies at every tier.
+**At Lightweight the gate is four items and nothing else:** every accepted finding fixed; one red-to-green check per accepted wrong-behavior finding (the Performance section's before/after evidence when it is a performance one); the scoped validation target run; ledger recorded — the first two vanish when nothing was accepted. The performance-evidence item applies at every tier.
 
 A gap means the loop is not done regardless of finding count: close it within the cap, else stop as **not converged**, naming the gap.
 

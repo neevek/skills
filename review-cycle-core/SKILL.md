@@ -63,7 +63,7 @@ User-visible checkpoints:
 - **Codex** — `explorer`s with `fork_context: false` and self-contained prompts, launched together. GPT reviewers follow tagged blocks (`<task>`, `<severity_rubric>`, `<ledger_factual>`, `<output_contract>`) far better than prose, and their *final message* is the whole deliverable. No subagent tool ⇒ concurrent read-only `codex exec` runs.
 - **Fresh means a separate agent.** The current session never reviews its own work, not even as a fallback; unavailable spawning is **blocked** (Stop rule).
 - **Model** — omit the model parameter on every spawn: the session's configured subagent default applies to all reviewers, at every tier and risk class. Override only when the user's request names a stronger model, and then pass it to the reviewers they named, or to all of them if they named none.
-- **Hand over the subject; don't send a scavenger hunt.** Paste the diff or plan into the prompt when it fits, otherwise give the one command that produces it. Discovery you already paid for, repeated once per reviewer, is this loop's quietest cost.
+- **Hand over the subject; don't send a scavenger hunt.** Paste the diff or plan into the prompt when it fits, otherwise give the one command that produces it. Discovery you already paid for, repeated once per reviewer, is this loop's quietest cost. Pass 2+ hands over the delta the same way — the hunks or steps the last pass changed — and states that the rest of the subject is settled context, in scope only where the delta breaks it.
 
 ## One-shot report contract (inject verbatim, with the severity rubric)
 
@@ -71,13 +71,13 @@ A reviewer reports once and is never consulted again; anything withheld costs a 
 
 "Your final message is your entire deliverable and your only report — there are no follow-up questions. Enumerate every finding you can defend here, not just the most severe: after the first plausible issue keep auditing until your scope is exhausted (second-order failures, empty/error states, retries, stale state, rollback).
 
-One line per finding — `[High|Medium|Low] <file:line or plan step> — <defect> — <evidence> — <new | already-settled-in-ledger>`. Evidence: two sentences at most; a claim needing more is a guess, so mark it `needs-verification` and name the one check that would settle it. At most 10 findings — past that, report the 10 that matter and say you truncated. No preamble, no restating what the subject does, no summary of your reasoning: the main session wrote it and has read it.
+One line per finding — `[High|Medium|Low] <file:line or plan step> — <defect> — <evidence> — <new | already-settled-in-ledger>`. Evidence: two sentences at most — for a wrong-behavior claim, the concrete input or state and the wrong outcome it produces. A claim needing more, or one you cannot instantiate, is a guess: mark it `needs-verification` and name the one check that would settle it. At most 10 findings — past that, report the 10 that matter and say you truncated. No preamble, no restating what the subject does, no summary of your reasoning: the main session wrote it and has read it.
 
 If nothing is at/above Medium, say exactly that and stop — a padded report costs an extra pass."
 
 ## Triage
 
-Never blind-apply. Give every finding a disposition (the calling skill's states) and record **why** — fresh reviewers guess wrong on taste, `unsafe`, lifetimes, FFI, threading, and architectural preference is not automatically correct.
+Never blind-apply. Give every finding a disposition (the calling skill's states) and record **why** — fresh reviewers guess wrong on taste, `unsafe`, lifetimes, FFI, threading, and architectural preference is not automatically correct. Disposition from the subject, not the report: read the cited code or step before deciding and accept only what you can see there; a claim you cannot confirm by reading resolves as reviewer uncertainty below.
 
 **Classify before accepting** (limit 3):
 
@@ -85,7 +85,7 @@ Never blind-apply. Give every finding a disposition (the calling skill's states)
 - the same defect on a path the user didn't mention → fix only if it is the same mechanism and the same edit; otherwise record it and tell the user.
 - new behavior, a new surface, a new abstraction → **don't build it**; one line to the user. This is how a 15-line change becomes 60 lines nobody asked for. Widening also invalidates the tier — re-size first.
 
-**Confirming a high-impact finding** (memory safety, ABI/contract break, data loss, security, a change to architecture/lifecycle/state ownership): at most one extra read-only reviewer, launched in the *next* pass's message so it costs no extra wall time. At Lightweight, confirm it yourself by reading and quoting the cited code, spawning only if the claim turns on code you cannot reach.
+**Confirming a high-impact finding** (memory safety, ABI/contract break, data loss, security, a change to architecture/lifecycle/state ownership): at most one extra read-only reviewer, launched in the *next* pass's message so it costs no extra wall time. At Lightweight or in the final pass, confirm it yourself by reading and quoting the cited code, spawning the lone reviewer only if the claim turns on code you cannot reach.
 
 **A reviewer's own uncertainty** must resolve: technical doubt → that one confirming reviewer; a scope, priority, or trade-off call only the user can make → **stop and ask the user**.
 
