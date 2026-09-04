@@ -35,7 +35,7 @@ Size from the *subject*, not from how important the work feels.
 |---|---|---|---|
 | when | ≤ ~3 production files / ~150 lines or plan steps, one risk class, no changed contract | neither column fits; includes internal concurrency/lifecycle changes contained in one component | public/wire/on-disk contract, security boundary, migration, ownership crossing components/processes, ≥3 named risk classes, or ≥10 production files |
 | reviewers/pass | **2** — the calling skill's two axes, concurrent | 2–3 — the axes plus the dominant risk class | one per disjoint scope, plus the second axis |
-| pass cap | **1** | 2 | 4 (8 only if the user asked for exhaustive) |
+| pass cap | **1** | 2 | 10 |
 | gate | items the subject touches | full, minus untouched stacks | full |
 | Design It Twice | no | load-bearing decisions only | available |
 
