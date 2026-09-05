@@ -1,0 +1,101 @@
+{
+  "purpose": "Maintenance-only behavioral cases. Replay inputs against the skills without launching real reviewers or executing the simulated project commands. Hide expected invariants from the evaluating agent. Record observed actions, outcome, assignments, and unnecessary checks; do not treat simulated runtimes as measured production speed.",
+  "cases": [
+    {
+      "id": "clean_small_change",
+      "skill": "review-fix-cycle",
+      "input": "Review a two-line internal display-label change against the supplied acceptance text. No public contract or other risk boundary changes. The independent reviewer covers correctness and spec on version A, returns no findings and complete coverage. The required scoped check passed on A and inputs still match. No fixes are needed. Decide the assignments and terminal outcome.",
+      "expected": ["One initial combined assignment suffices", "Converged", "No second audit or repeated green check"]
+    },
+    {
+      "id": "final_delta",
+      "skill": "review-fix-cycle",
+      "input": "Lightweight review has used one assignment. A boundary-input defect was accepted, reproduced on the pre-fix state, and corrected in version B. The regression and scoped validation now pass. All original finding keys have been marked fixed. The original independent reviewer is available, but no reviewer has inspected B. Decide what to do next and when completion is allowed.",
+      "expected": ["Use remaining assignment for focused independent delta verification, reusing reviewer", "Do not claim convergence yet", "Reuse matching green validation"]
+    },
+    {
+      "id": "intermittent_candidate_failure",
+      "skill": "review-fix-cycle",
+      "input": "A required concurrency test fails on the candidate and passes on its immediate rerun without edits. No corresponding failure has been observed on the base. Static reviews are complete. Decide the failure disposition, next validation action, and whether this can complete.",
+      "expected": ["Attribution unresolved, not proven environment noise", "Focused mechanism or base/candidate investigation rather than blind retries", "No clean completion while relevant failure is unresolved"]
+    },
+    {
+      "id": "compiled_red_evidence",
+      "skill": "review-fix-cycle",
+      "input": "A C implementation was replaced to remove duplicates. A happy-path test passes both original and fixed implementations; it fails if the entire replacement algorithm is disabled. The author then edits a guard in source and reruns an existing fixed binary without rebuilding. They offer both observations as regression evidence. Decide what evidence is usable and the minimum faithful validation sequence.",
+      "expected": ["Neither observation proves the original symptom was reproduced", "Exercise duplicates against actual pre-fix and fixed behavior", "Build matching binaries for distinct states, reuse each within its state"]
+    },
+    {
+      "id": "mixed_worktree",
+      "skill": "review-fix-cycle",
+      "input": "The user requests review of all unfinished feature work. Status shows a staged router edit, an unstaged edit to that router, and an untracked handler file required by the feature. During review the user changes that handler again. Decide the initial subject capture and what remains valid afterward.",
+      "expected": ["Include staged, unstaged, and relevant untracked contents", "Capture stable inputs without staging or committing user work", "Invalidate affected coverage and checks for changed handler, retain unrelated results"]
+    },
+    {
+      "id": "limited_concurrency",
+      "skill": "review-plan-cycle",
+      "input": "Review a plan involving a persisted-format migration and all five listed risk classes. The host has four total agent slots, including the parent; one unrelated child is active. Select the default tier and assignments. State how to schedule available work and what happens if there is temporarily no spare child slot.",
+      "expected": ["Full with grouped risk coverage, at most three initial assignments", "At most two new children concurrently initially", "Queue/wait without declaring unavailable review or omitting a risk", "Reserve delta verification within total budget"]
+    },
+    {
+      "id": "uncertainty_without_edit",
+      "skill": "review-plan-cycle",
+      "input": "Standard review used two assignments. The sole finding is a plausible contract defect marked needs-verification. Direct evidence is ambiguous and one factual clarification did not settle it. No plan edit has occurred. An independent confirming reviewer can access the needed boundary evidence. Decide the next action and whether no-edit ends the task.",
+      "expected": ["Schedule confirming assignment now within remaining budget", "Do not fabricate an edit or wait for another pass", "Keep issue unresolved until evidence arrives"]
+    },
+    {
+      "id": "correction_after_review",
+      "skill": "review-fix-cycle",
+      "input": "A Standard cycle has used one edit batch and three assignments. Its first fix added a lock to prevent a race. Delta review now supplies a concrete callback timeline proving a new deadlock caused by holding that lock. Both race prevention and callback completion are required, and the fix can satisfy both within the same authorized component. Decide whether to freeze, ask the user, or correct it and how to verify the result.",
+      "expected": ["Permit evidence-backed correction preserving both requirements", "Use remaining edit batch and focused verification assignment", "No automatic user trade-off or whole-checkout rollback"]
+    },
+    {
+      "id": "truncated_review",
+      "skill": "review-fix-cycle",
+      "input": "An initial Standard correctness reviewer reports ten defects and says two more were found but omitted for output length. Spec coverage is complete. No edits have happened and the reviewer can supply the two already-produced findings. Decide coverage status and whether another full audit is needed.",
+      "expected": ["Coverage incomplete until omitted findings recovered", "Retrieve existing findings as continuation without full re-audit", "Do not stop merely because no edit has occurred"]
+    },
+    {
+      "id": "persisted_plan_boundary",
+      "skill": "review-plan-cycle",
+      "input": "A plan renames a serialized field and lists only the writer module. It asserts that client/server lockstep deployment eliminates migration needs. The writer calls a storage adapter not named in the plan, and old records survive deployment. There is only one adapter implementation. Decide what the reviewer may inspect and which plan concerns are substantiated.",
+      "expected": ["Inspect direct storage consumer and persisted contract despite omitted scope entry", "Address existing records and rollback independently of lockstep communication", "One adapter alone is not a structural defect"]
+    },
+    {
+      "id": "deterministic_performance",
+      "skill": "review-fix-cycle",
+      "input": "The requested fix removes a duplicate emitted asset. Required output inspection proves the bundle shrank by exactly 12000 bytes while preserving the required contents. The claim is bundle size only; there is no latency or memory claim. Independent coverage and required checks are complete. Decide whether timing baselines, warmups, or percentiles are needed.",
+      "expected": ["Use deterministic artifact evidence for bundle size", "No irrelevant timing benchmark or percentile requirement", "Do not extrapolate to latency or memory improvements"]
+    },
+    {
+      "id": "budget_and_waiver",
+      "skill": "review-fix-cycle",
+      "input": "All review assignments are consumed and one evidence-backed Medium finding remains unresolved. No tools are missing and validation is green. First decide the result with no user waiver. Then decide the result if the user explicitly accepts that exact Medium risk, all coverage/readiness requirements otherwise hold, and the waiver is recorded.",
+      "expected": ["Without waiver: not converged, despite green tests", "With waiver: complete with accepted risks", "Never silently reclassify or claim clean convergence"]
+    },
+    {
+      "id": "runtime_capabilities",
+      "skill": "review-fix-cycle",
+      "input": "Native spawn supports fork_turns and a model parameter, but not fork_context or an agent_type field. The parent uses a frontier model with write access; the runtime offers no child-specific permission override. A supported mid-tier model is available. Decide spawn settings and how to describe isolation. No real spawn is needed for this replay.",
+      "expected": ["Use exposed fresh-context and explicit model controls", "Do not assume explorer, default model, or prompt implies isolation", "State instruction-level read-only limitation without global config mutation"]
+    },
+    {
+      "id": "validation_after_review_budget",
+      "skill": "review-fix-cycle",
+      "input": "A Lightweight cycle used its one edit batch and both review assignments. The final material delta has complete independent coverage and all findings are resolved. A required scoped validation process on that frozen version is still running. No further review or edit is currently needed. Decide what budget exhaustion means now, and the outcome after that process passes with matching inputs.",
+      "expected": ["Wait for already-started validation; review budget does not cancel or prohibit main-session checks", "Converged after matching required validation passes", "No new review assignment or repeated check"]
+    },
+    {
+      "id": "explicit_evidence_waiver",
+      "skill": "review-fix-cycle",
+      "input": "The final change and all material fixes have complete independent coverage. Required local checks passed, but an external-device acceptance check cannot run because the device is unavailable. First decide the outcome without a waiver. Then the user explicitly accepts skipping that exact device check and its stated residual risk; nothing else remains pending. Decide the outcome and what the report must say.",
+      "expected": ["Without waiver: blocked on missing required device evidence", "With waiver: complete with accepted risks", "Report the skipped check and never claim it passed"]
+    },
+    {
+      "id": "required_broad_check",
+      "skill": "review-fix-cycle",
+      "input": "A repository's standing instructions require its single package test command before completion. No narrower supported target covers the touched seam. A previous green result belongs to the pre-fix source; current changes affect that target. Decide validation breadth, cache reuse, and whether to request a scope waiver.",
+      "expected": ["Run smallest faithful required package check, even if it is the whole suite", "Old result is dirty for relevant changed inputs", "No unnecessary permission or scope-expansion question"]
+    }
+  ]
+}
