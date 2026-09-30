@@ -5,13 +5,13 @@ description: Shared execution rules for review-plan-cycle and review-fix-cycle, 
 
 # review-cycle-core
 
-The calling skill supplies the subject and domain checks. This skill owns scheduling, triage, and completion. Only the main session edits the subject; independent agents review it. Preserve the user's scope and existing authorization.
+The calling skill supplies the subject and domain checks. This skill owns scheduling, triage, and completion. Only the main session edits the subject, fixes included: it holds the triage context that a delegated fixer would rebuild while the main session waits. Independent agents review the subject. Preserve the user's scope and existing authorization.
 
 ## Run sheet
 
 1. Read applicable `AGENTS.md` / `CLAUDE.md`, decisions, and glossary. Capture the calling skill's scope map and subject version.
 2. Choose a tier and assign coverage. Announce initial reviewers, total review budget, available concurrency, and scoped validation. Reserve capacity for verifying material fixes.
-3. Launch independent assignments concurrently up to available slots. Hand over the captured subject, relevant boundary context, intent, assigned checks, severity/threshold, and report contract below. Work on independent preparation; otherwise use the harness's notification/wait mechanism.
+3. Launch independent assignments concurrently up to available slots. Hand over the subject files and version (see Reviewer execution), relevant boundary context, intent, assigned checks, severity/threshold, and report contract below. Work on independent preparation; otherwise use the harness's notification/wait mechanism.
 4. Collect the affected assignments before editing their shared subject. Deduplicate and triage all findings; resolve evidence gaps now. Apply accepted fixes in one batch, then validate and independently verify material changes, concurrently where their inputs and resources permit.
 5. Update finding, coverage, and validation state. Continue only for a named unresolved check or affected delta within budget. Evaluate the completion table after each batch; closing finding keys alone is insufficient.
 6. Report the result, evidence, unresolved work, and actual cost counters.
@@ -26,7 +26,7 @@ Respect documented decisions while checking their applicability. Lockstep deploy
 
 ## Effort and scheduling
 
-Size by actual changed mechanisms and consequences, not the number of checklist labels. Validation and UX do not each force another reviewer. Group related risks under one owner without omitting coverage.
+Size by actual changed mechanisms and consequences, not the number of checklist labels. Validation and UX do not each force another reviewer. Group related risks under one owner without omitting coverage. When one owner's subject is too large to cover in a single pass, split it by path or mechanism within the tier's budget rather than accept `coverage: incomplete`.
 
 | Tier | Subject | Initial assignments | Total review assignments | Edit batches |
 |---|---|---|---|---|
@@ -40,13 +40,21 @@ Reserve at least one assignment for material-delta verification; use the others 
 
 Use the host's actual concurrency limit, including the parent and other active agents. Queue assignments when slots are occupied; fewer slots do not mean review is blocked. With one child slot, run distinct assignments sequentially. Start independent work together when supported; a single tool message is not a correctness requirement.
 
-Do not impose reviewer deadlines or equate slowness with failure. Use supported waits without busy polling or inventing extra work. On reported failure/disconnection, preserve completed coverage and retry only the missing assignment within budget; unavailable required resources are a real blocker. Let active in-scope reviewers finish.
+Do not impose reviewer deadlines or equate slowness with failure. Wait on the harness's completion notification or wait tool, without busy polling, invented extra work, or timed wake-ups that can fire after the work is done. On reported failure/disconnection, preserve completed coverage and retry only the missing assignment within budget; unavailable required resources are a real blocker. Let active in-scope reviewers finish.
 
 ## Reviewer execution
 
 Inspect available tool parameters once; do not hardcode a host/version's spawn schema. Initial reviewers start with separate, fresh context (for example `fork_turns: "none"` or `fork_context: false` only where exposed). Later delta verification may reuse an independent reviewer who did not author the changes. A contested rejection gets an independent check without the author's rejection rationale; do not ask a reviewer merely to repeat its own claim.
 
-Honor a requested model and reasoning effort. Otherwise, for Codex reviewers, select `gpt-6-luna` with `max` reasoning effort; pass both on the spawn call with `fork_turns: "none"`, because a full-history fork inherits the parent's model and effort. On other hosts, explicitly select a supported mid-tier reviewer model and suitable reasoning effort where available. Do not assume `explorer` or a CLI default selects one. Use a configured review agent/profile if needed. If selection is unavailable, disclose the inherited/unknown setting and use the available reviewer within budget; do not change global configuration. A harder model or extra reviewer needs a specific unresolved reasoning task, not a blanket fan-out.
+Honor a requested model and reasoning effort. Otherwise use these reviewer settings:
+
+- **Claude Code:** the `review-cycle-reviewer` agent type from this skill's `agents/review-cycle-reviewer.md`. It pins Sonnet at medium effort with read-only tools, so the host enforces the no-edit, no-build, no-spawn contract. For the harder model, pass `model: "opus"` to the same type. If the type is not listed, use `general-purpose` with `model: "sonnet"`, report that read-only is then instruction-level only, and tell the user to install the type by symlinking that file into `~/.claude/agents/`. Do not use `Explore`: it reads excerpts to locate code rather than audit it.
+- **Codex:** `gpt-6-luna` with `max` reasoning effort, passed on the spawn call with `fork_turns: "none"`, because a full-history fork inherits the parent's model and effort. The harder model is `gpt-6-astra` with `high`.
+- **Other hosts:** explicitly select a supported mid-tier reviewer model and suitable reasoning effort.
+
+Do not assume `explorer` or a CLI default selects a model. If the agent type or selection is unavailable, disclose the inherited/unknown setting and use the available reviewer within budget; do not change global configuration. The harder model or an extra reviewer needs a specific unresolved reasoning task, such as a hotspot re-audit or a contested blocker, not a blanket fan-out.
+
+Hand reviewers the subject as files, never as pasted bytes or a moving ref. For code, run this skill's `scripts/snapshot.sh OUT_DIR BASE [PREV_TREE] [-- PATHSPEC...]` by absolute path from inside the repository under review. Put `OUT_DIR` in the session's scratch directory when the host provides one, since reviewers can read it without a permission prompt; otherwise use `$(git rev-parse --git-path review-cycle)`. It records staged, unstaged, and untracked work as a tree ID without touching the index, and writes the subject patch; given the previous tree, it also writes the exact delta patch. The tree ID is the subject version: equal IDs mean nothing in the worktree changed, and `git diff --name-only` between two IDs names the paths whose coverage and checks are affected. For a plan, write each version to a file and produce deltas with `git diff --no-index`. Include a digest of the project instructions already read so reviewers do not re-read them.
 
 Enforce read-only permissions where the host supports them. An `explorer` label or a prompt is not a sandbox; inspect effective permissions, including inherited overrides. When enforcement is unavailable, retain the no-edit contract and report that limitation rather than claiming isolation.
 
@@ -54,7 +62,7 @@ If native delegation is absent, use independent CLI processes only if available 
 
 ## Report contract (inject with the rubric)
 
-> Review read-only; do not edit, spawn agents, or run builds, tests, benchmarks, or profilers. Audit the assigned subject and directly affected boundaries against the supplied intent. The main session owns measurements. Continue until assigned coverage is exhausted, then return findings together.
+> Review read-only; do not edit, spawn agents, or run builds, tests, benchmarks, or profilers. This prompt is your whole brief; do not load the review-cycle skills. Audit the assigned subject and directly affected boundaries against the supplied intent. The main session owns measurements. Continue until assigned coverage is exhausted, then return findings together.
 >
 > For each finding give severity, axis, file/line or plan step, defect, concrete triggering state and outcome, evidence, and the smallest remedy or verification check. Use enough detail to substantiate the claim; uncertainty is `needs-verification`, not a proven defect. Omit taste-only nits. If no blocking findings exist, say so.
 >
@@ -68,19 +76,21 @@ If native delegation is absent, use independent CLI processes only if available 
 
 **Default blocking threshold: High and Medium.** The user may explicitly choose another threshold or accept a specific residual risk. Do not silently downgrade severity to finish. Unresolved evidence for a plausible at-threshold finding remains pending; uncertainty is not acceptance or rejection.
 
-Read the cited subject before deciding. Deduplicate by stable location/requirement + failure mechanism across reviewers and batches. Dispositions are `accept`, `reject` with evidence, `needs-verification`, or `defer` with owner/reason. Defer only nonblocking implementation details or explicitly accepted residual risks; deferral alone cannot clear a blocker.
+Read the cited subject before deciding. Deduplicate by stable location/requirement + failure mechanism across reviewers and batches. Dispositions are `accept`, `reject` with evidence, `needs-verification`, or `defer` with owner/reason. Defer only nonblocking implementation details or explicitly accepted residual risks; deferral alone cannot clear a blocker. Apply a Low finding only when its edit is non-material, and otherwise list it in the report; Low findings never justify a delta assignment.
 
 Resolve technical doubt using the cheapest decisive source read or main-session check. One factual clarification to the existing reviewer is allowed. If independent judgment is still needed, schedule one confirming assignment **now**, within the budget, even if no edit has occurred. Confirmation must precede a decision depending on it; it never requires a fictitious next pass. An unsupported suggestion can be rejected as such; a disputed, evidence-backed blocker remains open until resolved or explicitly accepted by the user.
 
 ## Delta verification and anti-oscillation
 
-Track review coverage separately from findings. A **material delta** changes behavior, a contract, algorithm, ownership/lifecycle, acceptance criteria, validation meaning, or an executable plan step. It requires independent verification on its final version, plus affected-boundary checks. Pure formatting, links, and explanatory wording that change none of these can be checked locally. Closing a finding does not cover the resulting delta.
+Track review coverage separately from findings. A **material delta** changes behavior, a contract, algorithm, ownership/lifecycle, acceptance criteria, validation meaning, or an executable plan step. It requires independent verification on its final version, plus affected-boundary checks. Pure formatting, links, local renames, and explanatory wording that change none of these can be checked locally. Closing a finding does not cover the resulting delta.
 
 After a fix, give a prior independent reviewer the exact delta, current relevant context, affected requirements, and regression/validation evidence. Reuse unaffected coverage. Ask only for correctness, objective, and boundary consequences of this delta; one reviewer can cover multiple affected axes. Verification may run alongside scoped validation on that same frozen state. If another material edit follows, invalidate only its affected coverage and validation.
 
 Incomplete or truncated coverage remains queued even on unchanged code. Retrieve omitted findings or audit the missing scope within budget. The no-duplicate-work rule does not prohibit filling a coverage gap or resolving a contested finding.
 
 Allow correction of a review-introduced regression when evidence improves and the earlier requirement remains satisfied. Overlapping lines, duplicate reports in one batch, or fewer findings are not convergence tests. Record what new evidence changed the decision. If the same key returns after two reasoned dispositions with **no new evidence**, freeze that key and report unresolved disagreement. Do not undo other validated work or freeze unrelated fixes. Genuinely incompatible requirements go to the user; an ordinary technical correction does not.
+
+The same-key rule does not catch a **hotspot**, where each delta on one step or mechanism turns up a *new* key. Once delta reviews there have twice yielded a new at-threshold finding (initial-audit findings do not count), stop patching edge cases one at a time. Within the remaining budget, spend the next assignment on a single re-audit of the whole mechanism with the harder reviewer model, asking for the design that satisfies every requirement recorded against it. Apply that design as one batch and verify it like any material delta. When the re-audit and its verification no longer fit the budget, report **not converged** and name the hotspot.
 
 ## Ledger and completion
 

@@ -96,6 +96,18 @@
       "skill": "review-fix-cycle",
       "input": "A repository's standing instructions require its single package test command before completion. No narrower supported target covers the touched seam. A previous green result belongs to the pre-fix source; current changes affect that target. Decide validation breadth, cache reuse, and whether to request a scope waiver.",
       "expected": ["Run smallest faithful required package check, even if it is the whole suite", "Old result is dirty for relevant changed inputs", "No unnecessary permission or scope-expansion question"]
+    },
+    {
+      "id": "plan_hotspot",
+      "skill": "review-plan-cycle",
+      "input": "A Full plan review has used four assignments and two edit batches. Step 5 defines reconnect retry and cancellation. The first delta review of step 5 found a new Medium (a stale completion after cancel), which was patched. The second delta review of step 5 found a different new High (a retry storm when the relay is quiet). No finding key has repeated, and every other step is verified. Decide the next action and how to spend the remaining budget.",
+      "expected": ["Treat step 5 as a hotspot rather than patching the new High alone", "One whole-mechanism re-audit on the harder reviewer model, then one batch and focused verification", "Not frozen as oscillation and no budget raise"]
+    },
+    {
+      "id": "low_only_findings",
+      "skill": "review-fix-cycle",
+      "input": "A Standard cycle has independently verified its material fixes, and no at-threshold findings remain. The final delta reviewer also reported three Low findings: two local variable renames and a rename of a public function other packages call. One edit batch and one assignment remain. Decide which Lows to apply, whether another review assignment is needed, and the outcome.",
+      "expected": ["Apply at most the non-material local renames; list the public rename in the report", "No delta assignment for Low-only edits", "Converged once required validation matches the final state"]
     }
   ]
 }
