@@ -32,7 +32,7 @@ Size by actual changed mechanisms and consequences, not the number of checklist 
 |---|---|---|---|---|
 | Lightweight | Small, locally understandable change or plan; one bounded mechanism, no security or external contract change | 1, covering both calling axes with separate findings | 2 | 1 |
 | Standard | Contained multi-file work, including internal lifecycle/concurrency | 2, the calling axes | 4 | 2 |
-| Full | Security boundary, public/wire/on-disk contract, migration, ownership across components/processes, or large independent change surfaces | Up to 3: grouped risk scopes plus objective/spec | 8 | 3 |
+| Full | Security boundary, public/wire/on-disk contract, migration, ownership across components/processes, or large independent change surfaces | Up to 3: grouped risk scopes plus objective/spec | 15 | 3 |
 
 An assignment is an initial audit, delta audit, confirming review, or design exploration. Follow-up audits count even on an existing agent. Retrieving already-produced findings or one factual clarification continues the original assignment. Edit batches count subject refinements, not temporary regression-test states. These limits govern new review assignments and edit batches, not completion of already-started work or main-session evidence/validation checks. User-specified budgets take precedence. Re-size only for authorized scope changes; do not buy extra budget by renaming review-induced growth.
 
