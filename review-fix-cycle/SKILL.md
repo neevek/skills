@@ -22,7 +22,7 @@ Before assigning reviewers, record a compact map:
 
 Keep **Correctness** and **Spec** findings distinct. Lightweight uses one reviewer for both; Standard normally separates them; Full groups correctness risks under a few owners and assigns spec separately. Later assignments cover affected axes only. If neither intent nor spec can be established, ask for the missing objective; do not claim spec coverage.
 
-- **Correctness:** behavior on all affected paths/platforms, error handling, input/encoding/overflow, changed APIs/serialization/defaults, security and trust boundaries, concurrency/ownership/cancellation, packaging, and test seams. Event-driven work: quiescence, backpressure, wake-ups, and circular waits. Native/media work: lifetimes, FFI/ABI, buffer ownership, and frame/device lifecycle. UI: stale async state, loading/error/disabled states, navigation, and accessibility. Inject only touched areas. Simplification needs a concrete cost and minimal behavior-preserving remedy, per core.
+- **Correctness:** behavior on all affected paths/platforms, error handling, input/encoding/overflow, changed APIs/serialization/defaults, security and trust boundaries, concurrency/ownership/cancellation, packaging, and test seams. Event-driven work: quiescence, backpressure, wake-ups, and circular waits. Native/media work: lifetimes, FFI/ABI, buffer ownership, and frame/device lifecycle. UI: stale async state, loading/error/disabled states, navigation, and accessibility. Bug fixes: the root cause rather than only the reported symptom, and other paths that reach the same cause. Inject only touched areas.
 - **Spec:** missing/partial requirements, wrong implementations, and unrequested behavior. Quote the user/spec requirement and cite the code. Preserve required old behavior even when the feature request does not restate it. Code-quality findings belong under Correctness.
 - **Performance:** require a concrete mechanism, a material call-frequency/input-size relationship, an appropriate metric, and decisive verification. Unknown hotness is uncertainty, not a demonstrated regression. Omit cold-path micro-optimizations.
 
@@ -63,4 +63,4 @@ Before completion, verify:
 - Required scoped targets passed on matching inputs; no unresolved relevant failure is hidden as environment noise.
 - Spec coverage and the finding/coverage/validation ledgers are current. Core's completion table decides the outcome at every tier.
 
-Report fixes, rejection evidence, commands/targets and results, remaining coverage gaps, relevant performance evidence, and concrete spec misses or scope creep, with core's cost counters; omit empty domain sections.
+Report fixes, rejection evidence, commands/targets and results, remaining coverage gaps, relevant performance evidence, concrete spec misses or scope creep, and how to revert when the change touches persisted data, migrations, or rollout, with core's cost counters; omit empty domain sections.

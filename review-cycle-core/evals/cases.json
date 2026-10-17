@@ -108,6 +108,30 @@
       "skill": "review-fix-cycle",
       "input": "A Standard cycle has independently verified its material fixes, and no at-threshold findings remain. The final delta reviewer also reported three Low findings: two local variable renames and a rename of a public function other packages call. One edit batch and one assignment remain. Decide which Lows to apply, whether another review assignment is needed, and the outcome.",
       "expected": ["Apply at most the non-material local renames; list the public rename in the report", "No delta assignment for Low-only edits", "Converged once required validation matches the final state"]
+    },
+    {
+      "id": "pre_existing_finding",
+      "skill": "review-fix-cycle",
+      "input": "A Standard review of a change that adds a new export format reports a High: the existing CSV importer, which the change does not touch or call, truncates fields over 64 KiB. The main session confirms the same code and behavior on the base. The reviewer also reports a Medium in the new exporter, which is accepted and fixed in version B. Decide how each finding affects blocking, what B's delta reviewer receives, and how the CSV finding is reported.",
+      "expected": ["CSV truncation is pre-existing and nonblocking because the subject neither reaches nor worsens it", "Delta reviewer gets B's delta plus the dispositioned keys, with unchanged code out of scope unless the delta changes its behavior", "CSV finding is listed as pre-existing in the report, not fixed in this cycle"]
+    },
+    {
+      "id": "sibling_instances",
+      "skill": "review-fix-cycle",
+      "input": "A Full review accepted a Medium: one handler reads a request field without validating its length. The fix was applied in version B. B's delta reviewer reports the same unvalidated read in a second handler that the original change also added, not mentioning the first. Two edit batches remain. Decide the finding key, the fix scope, and whether this counts toward the hotspot rule.",
+      "expected": ["Same defect class and mechanism, so the existing key reopens rather than a new key", "Fix every in-scope instance of the class in one batch", "Not a new at-threshold key for the hotspot rule"]
+    },
+    {
+      "id": "hotspot_approach_change",
+      "skill": "review-fix-cycle",
+      "input": "A Full review's sync mechanism is a hotspot: two delta reviews each found a new High. The harder-model re-audit concludes that the change's polling approach cannot satisfy the recorded requirements and proposes replacing it with server push, which adds a new endpoint. Budget remains for one batch and its verification. Decide whether to apply the design and the outcome.",
+      "expected": ["Do not apply a design that replaces the change's approach", "Report not converged with the proposed design for the user", "Keep validated work; no blanket restart"]
+    },
+    {
+      "id": "mislabeled_medium",
+      "skill": "review-fix-cycle",
+      "input": "A Standard review reports two Mediums. One says a config loader is fragile and should be split into smaller functions, citing no input or change that would break it. The other says a new retry helper swallows the error when the callback throws a non-Error value, with a triggering example. Decide each finding's severity, disposition, and whether it blocks.",
+      "expected": ["Re-rate the config-loader finding to Low with the reason recorded; it does not block", "Keep the retry-helper finding at Medium; accept it after confirming the example", "The retry-helper fix gets pre-fix evidence and independent delta verification"]
     }
   ]
 }
